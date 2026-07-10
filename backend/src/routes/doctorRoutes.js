@@ -1,0 +1,13 @@
+import express from 'express';
+import { getDoctors, createDoctor, deleteDoctor } from '../controllers/doctorController.js';
+import { uploadPhoto } from '../middleware/upload.js';
+import { authenticateToken } from '../middleware/auth.js';
+import { checkModulePermission } from '../middleware/permission.js';
+
+const router = express.Router();
+
+router.get('/', authenticateToken, checkModulePermission('Doctor', 'read'), getDoctors);
+router.post('/', authenticateToken, checkModulePermission('Doctor', 'create'), uploadPhoto.single('photo'), createDoctor);
+router.delete('/:id', authenticateToken, checkModulePermission('Doctor', 'delete'), deleteDoctor);
+
+export default router;
