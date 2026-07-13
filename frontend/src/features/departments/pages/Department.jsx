@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../../app/context/AuthContext';
 import api from '../../../common/services/api';
 import { Plus, Trash2, Search, Building2 } from 'lucide-react';
 import { TableSkeleton } from '../../../common/components/Skeleton';

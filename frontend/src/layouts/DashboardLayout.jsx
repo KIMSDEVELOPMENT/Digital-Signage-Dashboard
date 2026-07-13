@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../app/context/AuthContext';
 import BottomFooter from '../common/components/BottomFooter';
 import { 
   LayoutDashboard, 
@@ -15,7 +15,7 @@ import {
   User,
   Settings
 } from 'lucide-react';
-import logoImg from '../assets/kims-logo.png';
+import logoImg from '../common/assets/kims-logo.png';
 
 const DashboardLayout = () => {
   const { user, logout, hasPermission } = useAuth();

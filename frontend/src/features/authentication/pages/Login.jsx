@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../../app/context/AuthContext';
 import { toast } from 'react-hot-toast';
 import { User, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
-import logoImg from '../../../assets/kims-logo.png';
+import logoImg from '../../../common/assets/kims-logo.png';
 
 const Login = () => {
   const { login } = useAuth();

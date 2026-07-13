@@ -1,18 +1,18 @@
 import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ProtectedRoute, SuperAdminRoute, ModuleRoute } from './guards';
-import DashboardLayout from '../layouts/DashboardLayout';
+import DashboardLayout from '../../layouts/DashboardLayout';
 
 // Lazy loading pages for optimized code splitting
-const Login = lazy(() => import('../features/authentication/pages/Login'));
-const Dashboard = lazy(() => import('../features/dashboard/pages/Dashboard'));
-const Department = lazy(() => import('../features/departments/pages/Department'));
-const Doctor = lazy(() => import('../features/doctors/pages/Doctor'));
-const Admins = lazy(() => import('../features/settings/pages/Admins'));
-const AdminConfig = lazy(() => import('../features/settings/pages/AdminConfig'));
-const Roster = lazy(() => import('../features/doctors/pages/Roster'));
-const DisplayScreen = lazy(() => import('../features/display/pages/DisplayScreen'));
-const Error404 = lazy(() => import('../features/error/Error404'));
+const Login = lazy(() => import('../../features/authentication/pages/Login'));
+const Dashboard = lazy(() => import('../../features/dashboard/pages/Dashboard'));
+const Department = lazy(() => import('../../features/departments/pages/Department'));
+const Doctor = lazy(() => import('../../features/doctors/pages/Doctor'));
+const Admins = lazy(() => import('../../features/settings/pages/Admins'));
+const AdminConfig = lazy(() => import('../../features/settings/pages/AdminConfig'));
+const Roster = lazy(() => import('../../features/doctors/pages/Roster'));
+const DisplayScreen = lazy(() => import('../../features/display/pages/DisplayScreen'));
+const Error404 = lazy(() => import('../../features/error/Error404'));
 
 // Loader spinner fallback
 const PageLoader = () => (

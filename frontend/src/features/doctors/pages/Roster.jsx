@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../../context/AuthContext';
+import { useAuth } from '../../../app/context/AuthContext';
 import api from '../../../common/services/api';
 import { BRANCH_LOCATIONS, BRANCHES } from '../../../common/utils';
 import { 

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../../common/services/api';
 import { BRANCH_LOCATIONS, BRANCHES } from '../../../common/utils';
 import { Clock, Calendar, MapPin, Building2, User, ChevronRight, MonitorPlay } from 'lucide-react';
-import logoImg from '../../../assets/kims-logo.png';
+import logoImg from '../../../common/assets/kims-logo.png';
 
 const DisplayScreen = () => {
   const [searchParams] = useSearchParams();
