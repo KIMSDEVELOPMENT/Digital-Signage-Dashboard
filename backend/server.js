@@ -8,6 +8,8 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { initializePool } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
+import branchRoutes from './routes/branchRoutes.js';
+import locationRoutes from './routes/locationRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
@@ -36,6 +38,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/branches', branchRoutes);
+app.use('/api/locations', locationRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/admins', adminRoutes);

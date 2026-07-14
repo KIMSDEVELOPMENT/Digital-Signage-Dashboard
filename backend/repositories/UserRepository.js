@@ -86,24 +86,43 @@ export class UserRepository {
 
   async getUserBranches(userId) {
     const pool = getPool();
-    const [rows] = await pool.query('SELECT branch FROM user_branches WHERE user_id = ?', [userId]);
+    const [rows] = await pool.query(`
+      SELECT b.name AS branch 
+      FROM user_branches ub
+      JOIN branches b ON ub.branch_id = b.id
+      WHERE ub.user_id = ?
+    `, [userId]);
     return rows.map((r) => r.branch);
   }
 
   async addUserBranch(userId, branch) {
     const pool = getPool();
+    let branchId = branch;
+    if (isNaN(branch)) {
+      const [bRows] = await pool.query('SELECT id FROM branches WHERE name = ?', [branch]);
+      if (bRows.length > 0) branchId = bRows[0].id;
+    }
     await pool.query(
-      'INSERT INTO user_branches (user_id, branch) VALUES (?, ?) ON DUPLICATE KEY UPDATE branch=branch',
-      [userId, branch]
+      'INSERT INTO user_branches (user_id, branch_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE branch_id=branch_id',
+      [userId, branchId]
     );
   }
 
   async hasBranchAccess(userId, branch) {
     const pool = getPool();
-    const [rows] = await pool.query(
-      'SELECT id FROM user_branches WHERE user_id = ? AND branch = ?',
-      [userId, branch]
-    );
+    let query = `
+      SELECT ub.id FROM user_branches ub
+      JOIN branches b ON ub.branch_id = b.id
+      WHERE ub.user_id = ?
+    `;
+    const params = [userId];
+    if (isNaN(branch)) {
+      query += ' AND b.name = ?';
+    } else {
+      query += ' AND ub.branch_id = ?';
+    }
+    params.push(branch);
+    const [rows] = await pool.query(query, params);
     return rows.length > 0;
   }
 
@@ -111,16 +130,30 @@ export class UserRepository {
 
   async getUserLocations(userId) {
     const pool = getPool();
-    const [rows] = await pool.query('SELECT branch, location FROM user_locations WHERE user_id = ?', [userId]);
+    const [rows] = await pool.query(`
+      SELECT b.name AS branch, l.name AS location 
+      FROM user_locations ul
+      JOIN locations l ON ul.location_id = l.id
+      JOIN branches b ON l.branch_id = b.id
+      WHERE ul.user_id = ?
+    `, [userId]);
     return rows;
   }
 
   async addUserLocation(userId, branch, location) {
     const pool = getPool();
-    await pool.query(
-      'INSERT INTO user_locations (user_id, branch, location) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE location=location',
-      [userId, branch, location]
-    );
+    const [rows] = await pool.query(`
+      SELECT l.id 
+      FROM locations l
+      JOIN branches b ON l.branch_id = b.id
+      WHERE b.name = ? AND l.name = ?
+    `, [branch, location]);
+    if (rows.length > 0) {
+      await pool.query(
+        'INSERT INTO user_locations (user_id, location_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE location_id=location_id',
+        [userId, rows[0].id]
+      );
+    }
   }
 
   // ─── Departments ───────────────────────────────────────────────────────────
@@ -185,14 +218,35 @@ export class UserRepository {
 
       await connection.query('DELETE FROM user_branches WHERE user_id = ?', [userId]);
       if (branches?.length > 0) {
-        const vals = branches.map((b) => [userId, b]);
-        await connection.query('INSERT INTO user_branches (user_id, branch) VALUES ?', [vals]);
+        // Map branch names to branch IDs
+        const [bRows] = await connection.query(
+          `SELECT id FROM branches WHERE name IN (${branches.map(() => '?').join(',')})`,
+          branches
+        );
+        if (bRows.length > 0) {
+          const vals = bRows.map((br) => [userId, br.id]);
+          await connection.query('INSERT INTO user_branches (user_id, branch_id) VALUES ?', [vals]);
+        }
       }
 
       await connection.query('DELETE FROM user_locations WHERE user_id = ?', [userId]);
       if (locations?.length > 0) {
-        const vals = locations.map((l) => [userId, l.branch, l.location]);
-        await connection.query('INSERT INTO user_locations (user_id, branch, location) VALUES ?', [vals]);
+        // Map branch + location names to location IDs
+        const locationIds = [];
+        for (const loc of locations) {
+          const [lRows] = await connection.query(`
+            SELECT l.id FROM locations l
+            JOIN branches b ON l.branch_id = b.id
+            WHERE b.name = ? AND l.name = ?
+          `, [loc.branch, loc.location]);
+          if (lRows.length > 0) {
+            locationIds.push(lRows[0].id);
+          }
+        }
+        if (locationIds.length > 0) {
+          const vals = locationIds.map((lid) => [userId, lid]);
+          await connection.query('INSERT INTO user_locations (user_id, location_id) VALUES ?', [vals]);
+        }
       }
 
       await connection.query('DELETE FROM user_departments WHERE user_id = ?', [userId]);

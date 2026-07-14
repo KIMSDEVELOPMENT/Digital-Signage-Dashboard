@@ -13,7 +13,8 @@ import {
   Menu, 
   X,
   User,
-  Settings
+  Settings,
+  Layers
 } from 'lucide-react';
 import logoImg from '../common/assets/kims-logo.png';
 
@@ -33,7 +34,7 @@ const DashboardLayout = () => {
     {
       name: 'Departments',
       path: '/departments',
-      icon: Building2,
+      icon: Layers,
       visible: hasPermission('Department', 'read'),
     },
     {
@@ -52,6 +53,12 @@ const DashboardLayout = () => {
 
   // Super Admin only menu items
   const adminMenuItems = [
+    {
+      name: 'Branch Master',
+      path: '/branches',
+      icon: Building2,
+      visible: user?.role === 'super_admin',
+    },
     {
       name: 'Admin Users',
       path: '/admins',

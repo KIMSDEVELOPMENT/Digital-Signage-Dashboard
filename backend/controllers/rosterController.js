@@ -10,7 +10,12 @@ import { getPool } from '../config/db.js';
 async function resolveLocation(branch, locParam) {
   if (!locParam) return null;
   const pool = getPool();
-  const [rows] = await pool.query('SELECT location FROM branches_locations WHERE LOWER(branch) = LOWER(?)', [branch]);
+  const [rows] = await pool.query(`
+    SELECT l.name AS location 
+    FROM locations l
+    JOIN branches b ON l.branch_id = b.id
+    WHERE LOWER(b.name) = LOWER(?)
+  `, [branch]);
   const normParam = locParam.toUpperCase().replace(/[^A-Z0-9]/g, '');
   for (const row of rows) {
     const normDb = row.location.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -28,58 +33,13 @@ export async function downloadTemplate(req, res) {
   }
 
   try {
-    const pool = getPool();
-    // 1. Fetch valid block names for this branch from DB
-    const [locRows] = await pool.query('SELECT location FROM branches_locations WHERE LOWER(branch) = LOWER(?)', [branch]);
-    const validBlocks = locRows.map(row => row.location);
-
-    // 2. Fetch all departments
-    const depts = await departmentRepository.findAll();
-    const validDepts = depts.map(d => d.name);
-
-    // 3. Fetch all doctors for this branch
-    const doctors = await doctorRepository.findWithFilters({ branches: [branch] });
-    const validDocs = doctors.map(d => d.name);
-
-    // Create Doctor Schedule Sheet
-    const todayStr = new Date().toISOString().split('T')[0];
-    const sampleBlock = validBlocks[0] || '';
-    const sampleDept = validDepts[0] || '';
-    const sampleDoc = validDocs[0] || '';
-
-    const scheduleData = [
-      {
-        'Date': todayStr,
-        'Site Name': branch,
-        'Block Name': sampleBlock,
-        'Department': sampleDept,
-        'Doctor Name': sampleDoc,
-        'Timing': '09:00 AM - 05:00 PM'
-      }
-    ];
-
-    const wsSchedule = xlsx.utils.json_to_sheet(scheduleData, {
-      header: ['Date', 'Site Name', 'Block Name', 'Department', 'Doctor Name', 'Timing']
-    });
-
-    // Create Lists Sheet
-    const maxLength = Math.max(validBlocks.length, validDepts.length, validDocs.length);
-    const listsData = [];
-    for (let i = 0; i < maxLength; i++) {
-      listsData.push({
-        'Valid Blocks': validBlocks[i] || '',
-        'Valid Departments': validDepts[i] || '',
-        'Valid Doctors': validDocs[i] || ''
-      });
-    }
-
-    const wsLists = xlsx.utils.json_to_sheet(listsData, {
-      header: ['Valid Blocks', 'Valid Departments', 'Valid Doctors']
+    // Task 1: The Excel file should contain ONLY the column headers
+    const wsSchedule = xlsx.utils.json_to_sheet([], {
+      header: ['Date', 'Site Name', 'Block Name', 'Department Name', 'Doctor Name', 'Timing']
     });
 
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, wsSchedule, 'Doctor Schedule');
-    xlsx.utils.book_append_sheet(wb, wsLists, 'Lists');
 
     const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Disposition', `attachment; filename=Roster_Template_${branch}.xlsx`);
@@ -116,7 +76,7 @@ export async function previewRoster(req, res) {
       headers.push(cell ? String(cell.v).trim() : '');
     }
 
-    const expectedHeaders = ['Date', 'Site Name', 'Block Name', 'Department', 'Doctor Name', 'Timing'];
+    const expectedHeaders = ['Date', 'Site Name', 'Block Name', 'Department Name', 'Doctor Name', 'Timing'];
     let isHeaderValid = true;
     if (headers.length < 6) {
       isHeaderValid = false;
@@ -144,8 +104,13 @@ export async function previewRoster(req, res) {
     }
 
     const pool = getPool();
-    // Fetch valid branch/locations configuration
-    const [configRows] = await pool.query('SELECT branch, location FROM branches_locations');
+    // Fetch valid branch/locations configuration from normalized tables
+    const [configRows] = await pool.query(`
+      SELECT b.name AS branch, l.name AS location 
+      FROM locations l
+      JOIN branches b ON l.branch_id = b.id
+      WHERE b.status = 1 AND l.status = 1
+    `);
     const validBranchLocations = {};
     const validBranches = new Set();
     configRows.forEach(row => {
@@ -159,7 +124,7 @@ export async function previewRoster(req, res) {
 
     const branchLower = branch.toLowerCase();
     if (!validBranches.has(branchLower)) {
-      return res.status(400).json({ message: `Branch '${branch}' is not configured in the database.` });
+      return res.status(400).json({ message: `Branch '${branch}' is not configured or inactive in the database.` });
     }
 
     // Verify permission for this branch
@@ -171,15 +136,15 @@ export async function previewRoster(req, res) {
       }
     }
 
-    // Fetch all departments
-    const departments = await departmentRepository.findAll();
+    // Fetch departments for this branch
+    const departments = await departmentRepository.findAll(branch);
     const departmentMap = {};
     departments.forEach(dept => {
       departmentMap[dept.name.toLowerCase()] = dept.id;
     });
 
-    // Fetch all doctors for this branch
-    const doctorsList = await doctorRepository.findWithFilters({ branches: [branch] });
+    // Fetch all active doctors for this branch
+    const doctorsList = await doctorRepository.findWithFilters({ branches: [branch], status: 1 });
     const doctorLookup = {};
     doctorsList.forEach(doc => {
       const nameKey = doc.name.trim().toLowerCase();
@@ -196,7 +161,7 @@ export async function previewRoster(req, res) {
       const rowDate = row['Date'];
       const rowSite = row['Site Name'] ? String(row['Site Name']).trim() : '';
       const rowBlock = row['Block Name'] ? String(row['Block Name']).trim() : '';
-      const rowDept = row['Department'] ? String(row['Department']).trim() : '';
+      const rowDept = row['Department Name'] ? String(row['Department Name']).trim() : '';
       const rowDocName = row['Doctor Name'] ? String(row['Doctor Name']).trim() : '';
       const rowTiming = row['Timing'] ? String(row['Timing']).trim() : '';
 
@@ -235,7 +200,7 @@ export async function previewRoster(req, res) {
 
       let deptId = null;
       if (!rowDept) {
-        errors.push(`Row ${rowNum}: Department is empty.`);
+        errors.push(`Row ${rowNum}: Department Name is empty.`);
       } else {
         deptId = departmentMap[rowDept.toLowerCase()];
         if (!deptId) {
@@ -243,6 +208,7 @@ export async function previewRoster(req, res) {
         }
       }
 
+      let doctorId = null;
       let employeeId = '';
       if (!rowDocName) {
         errors.push(`Row ${rowNum}: Doctor Name is empty.`);
@@ -253,6 +219,7 @@ export async function previewRoster(req, res) {
           errors.push(`Row ${rowNum}: Doctor '${rowDocName}' is not registered under branch '${branch}' and department '${rowDept}'.`);
         } else {
           employeeId = matchedDoc.employee_id;
+          doctorId = matchedDoc.id;
         }
       }
 
@@ -267,7 +234,8 @@ export async function previewRoster(req, res) {
         department: rowDept,
         doctor_name: rowDocName,
         timing: rowTiming,
-        employee_id: employeeId
+        employee_id: employeeId,
+        doctor_id: doctorId
       });
     });
 
@@ -307,31 +275,30 @@ export async function importRoster(req, res) {
     }
 
     const validEntries = [];
-    const missingEmployees = [];
+    const missingDoctors = [];
     const unauthorizedEmployees = [];
 
     for (const item of roster) {
-      const doctor = await doctorRepository.findByEmployeeId(item.employee_id);
+      const doctor = await doctorRepository.findById(item.doctor_id);
 
       if (!doctor) {
-        missingEmployees.push(item.employee_id);
+        missingDoctors.push(item.employee_id || item.doctor_id);
       } else {
         if (allowedBranches && !allowedBranches.map(b => b.toLowerCase()).includes(doctor.branch.toLowerCase())) {
           unauthorizedEmployees.push(doctor.name);
           continue;
         }
         validEntries.push({
-          employee_id: item.employee_id,
+          doctor_id: doctor.id,
           timing: item.timing || 'Not Scheduled',
-          branch: doctor.branch,
-          location: doctor.location,
+          branch_id: doctor.branch_id
         });
       }
     }
 
-    if (missingEmployees.length > 0) {
+    if (missingDoctors.length > 0) {
       return res.status(400).json({
-        message: `Import aborted. Employee ID(s) not found: ${missingEmployees.join(', ')}`,
+        message: `Import aborted. Doctor record(s) not found for: ${missingDoctors.join(', ')}`,
       });
     }
 

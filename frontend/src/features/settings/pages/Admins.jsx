@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../../common/services/api';
-import { BRANCH_LOCATIONS, BRANCHES } from '../../../common/utils';
 import { Plus, Trash2, Search, Key, ShieldAlert, User } from 'lucide-react';
 import { TableSkeleton } from '../../../common/components/Skeleton';
 import Modal from '../../../common/components/Modal';
@@ -10,6 +9,8 @@ const Admins = () => {
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [dbBranches, setDbBranches] = useState([]);
+  const [dbLocationsByBranch, setDbLocationsByBranch] = useState({});
   
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -27,6 +28,30 @@ const Admins = () => {
   const [resetPasswordVal, setResetPasswordVal] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const fetchConfigMasters = async () => {
+    try {
+      const branchesRes = await api.get('/branches?status=1');
+      const branchesData = branchesRes.data.map(b => b.name);
+      setDbBranches(branchesData);
+
+      const locationsRes = await api.get('/locations?status=1');
+      const mapping = {};
+      branchesData.forEach(name => {
+        mapping[name] = [];
+      });
+      locationsRes.data.forEach(loc => {
+        const bName = loc.branch_name;
+        if (bName) {
+          if (!mapping[bName]) mapping[bName] = [];
+          mapping[bName].push(loc.name);
+        }
+      });
+      setDbLocationsByBranch(mapping);
+    } catch (err) {
+      console.error('Failed to load config masters:', err);
+    }
+  };
+
   const fetchAdmins = async () => {
     try {
       setLoading(true);
@@ -41,6 +66,7 @@ const Admins = () => {
   };
 
   useEffect(() => {
+    fetchConfigMasters();
     fetchAdmins();
   }, []);
 
@@ -297,7 +323,7 @@ const Admins = () => {
                 className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 cursor-pointer"
               >
                 <option value="">Select Branch</option>
-                {BRANCHES.map((b) => (
+                {dbBranches.map((b) => (
                   <option key={b} value={b}>{b}</option>
                 ))}
               </select>
@@ -314,7 +340,7 @@ const Admins = () => {
               >
                 <option value="">Select Location</option>
                 {formData.default_branch &&
-                  BRANCH_LOCATIONS[formData.default_branch].map((loc) => (
+                  (dbLocationsByBranch[formData.default_branch] || []).map((loc) => (
                     <option key={loc} value={loc}>{loc}</option>
                   ))}
               </select>

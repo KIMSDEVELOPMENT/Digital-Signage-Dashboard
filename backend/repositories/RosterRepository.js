@@ -12,17 +12,19 @@ export class RosterRepository {
     let query = `
       SELECT r.id AS roster_id, r.date, r.timing, 
              d.id AS doctor_id, d.employee_id, d.name AS doctor_name, 
-             d.designation, d.photo_url, d.branch, d.location,
+             d.designation, d.photo_url, b.name AS branch, l.name AS location,
              dept.name AS department_name
       FROM roster r
-      JOIN doctors d ON r.employee_id = d.employee_id
+      JOIN doctors d ON r.doctor_id = d.id
+      JOIN branches b ON d.branch_id = b.id
+      JOIN locations l ON d.location_id = l.id
       JOIN departments dept ON d.department_id = dept.id
-      WHERE r.date = ? AND d.branch = ?
+      WHERE r.date = ? AND b.name = ?
     `;
     const params = [today, branch];
 
     if (location) {
-      query += ' AND d.location = ?';
+      query += ' AND l.name = ?';
       params.push(location);
     }
 
@@ -37,18 +39,18 @@ export class RosterRepository {
     try {
       await connection.beginTransaction();
 
-      const uniqueBranches = [...new Set(entries.map((e) => e.branch))];
-      for (const branch of uniqueBranches) {
+      const uniqueBranches = [...new Set(entries.map((e) => e.branch_id))];
+      for (const branchId of uniqueBranches) {
         await connection.query(
-          `DELETE r FROM roster r JOIN doctors d ON r.employee_id = d.employee_id
-           WHERE r.date = ? AND d.branch = ?`,
-          [today, branch]
+          `DELETE r FROM roster r JOIN doctors d ON r.doctor_id = d.id
+           WHERE r.date = ? AND d.branch_id = ?`,
+          [today, branchId]
         );
       }
 
       if (entries.length > 0) {
-        const values = entries.map((e) => [today, e.employee_id, e.timing]);
-        await connection.query('INSERT INTO roster (date, employee_id, timing) VALUES ?', [values]);
+        const values = entries.map((e) => [today, e.doctor_id, e.timing]);
+        await connection.query('INSERT INTO roster (date, doctor_id, timing) VALUES ?', [values]);
       }
 
       await connection.commit();

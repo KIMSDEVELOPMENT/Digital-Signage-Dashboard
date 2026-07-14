@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../../common/services/api';
-import { BRANCH_LOCATIONS, BRANCHES } from '../../../common/utils';
 import { Search, ShieldAlert, Check, User, Save, RefreshCw, Layers, MapPin, Shield } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -10,6 +9,8 @@ const AdminConfig = () => {
   const [search, setSearch] = useState('');
   const [admins, setAdmins] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [dbBranches, setDbBranches] = useState([]);
+  const [dbLocationsByBranch, setDbLocationsByBranch] = useState({});
   const [loadingAdmins, setLoadingAdmins] = useState(false);
   const [loadingDepts, setLoadingDepts] = useState(false);
 
@@ -22,6 +23,30 @@ const AdminConfig = () => {
     modules: {},
   });
   const [saving, setSaving] = useState(false);
+
+  const fetchConfigMasters = async () => {
+    try {
+      const branchesRes = await api.get('/branches?status=1');
+      const branchesData = branchesRes.data.map(b => b.name);
+      setDbBranches(branchesData);
+
+      const locationsRes = await api.get('/locations?status=1');
+      const mapping = {};
+      branchesData.forEach(name => {
+        mapping[name] = [];
+      });
+      locationsRes.data.forEach(loc => {
+        const bName = loc.branch_name;
+        if (bName) {
+          if (!mapping[bName]) mapping[bName] = [];
+          mapping[bName].push(loc.name);
+        }
+      });
+      setDbLocationsByBranch(mapping);
+    } catch (err) {
+      console.error('Failed to load config masters:', err);
+    }
+  };
 
   const fetchAdmins = async () => {
     try {
@@ -49,6 +74,7 @@ const AdminConfig = () => {
   };
 
   useEffect(() => {
+    fetchConfigMasters();
     fetchAdmins();
     fetchDepartments();
   }, []);
@@ -100,11 +126,15 @@ const AdminConfig = () => {
   const toggleBranch = (branch) => {
     let newBranches = [...permissions.branches];
     let newLocations = [...permissions.locations];
+    let newDepartments = [...permissions.departments];
 
     if (newBranches.includes(branch)) {
       newBranches = newBranches.filter(b => b !== branch);
       // Remove locations under this branch
       newLocations = newLocations.filter(loc => loc.branch !== branch);
+      // Remove departments under this branch
+      const deptsToRemove = departments.filter(d => d.branch_name === branch).map(d => d.id);
+      newDepartments = newDepartments.filter(id => !deptsToRemove.includes(id));
     } else {
       newBranches.push(branch);
     }
@@ -113,6 +143,7 @@ const AdminConfig = () => {
       ...permissions,
       branches: newBranches,
       locations: newLocations,
+      departments: newDepartments,
     });
   };
 
@@ -125,10 +156,14 @@ const AdminConfig = () => {
     }
 
     let newLocations = [...permissions.locations];
+    let newDepartments = [...permissions.departments];
     const index = newLocations.findIndex(l => l.branch === branch && l.location === location);
 
     if (index > -1) {
       newLocations.splice(index, 1);
+      // Remove departments under this branch and location
+      const deptsToRemove = departments.filter(d => d.branch_name === branch && d.location_name === location).map(d => d.id);
+      newDepartments = newDepartments.filter(id => !deptsToRemove.includes(id));
     } else {
       newLocations.push({ branch, location });
     }
@@ -136,6 +171,7 @@ const AdminConfig = () => {
     setPermissions({
       ...permissions,
       locations: newLocations,
+      departments: newDepartments,
     });
   };
 
@@ -186,6 +222,15 @@ const AdminConfig = () => {
       setSaving(false);
     }
   };
+
+  // Filter departments based on selected branches and locations
+  const filteredDepartments = departments.filter((dept) => {
+    const hasBranch = permissions.branches.includes(dept.branch_name);
+    const hasLocation = permissions.locations.some(
+      (loc) => loc.branch === dept.branch_name && loc.location === dept.location_name
+    );
+    return hasBranch && hasLocation;
+  });
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
@@ -270,8 +315,9 @@ const AdminConfig = () => {
                 1. Branch & Location Scope
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {BRANCHES.map(branch => {
+                {dbBranches.map(branch => {
                   const isBranchChecked = permissions.branches.includes(branch);
+                  const branchLocations = dbLocationsByBranch[branch] || [];
                   return (
                     <div key={branch} className="bg-slate-900/30 border border-slate-850 rounded-xl p-4 space-y-3">
                       <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -285,7 +331,7 @@ const AdminConfig = () => {
                       </label>
                       
                       <div className="pl-6 space-y-2 border-l border-slate-850/60">
-                        {BRANCH_LOCATIONS[branch].map(loc => {
+                        {branchLocations.map(loc => {
                           const isLocChecked = permissions.locations.some(l => l.branch === branch && l.location === loc);
                           return (
                             <label key={loc} className="flex items-center gap-2 cursor-pointer text-xs text-slate-400 hover:text-slate-200 select-none">
@@ -318,28 +364,34 @@ const AdminConfig = () => {
                   <p className="text-xs text-slate-500">Loading departments...</p>
                 ) : (
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {departments.map((dept) => {
-                      const isChecked = permissions.departments.includes(dept.id);
-                      return (
-                        <label
-                          key={dept.id}
-                          className={`flex items-center gap-2 p-2.5 rounded-lg border transition-all text-xs cursor-pointer select-none
-                            ${isChecked 
-                              ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400 font-semibold' 
-                              : 'bg-slate-950 border-slate-850 text-slate-400 hover:border-slate-800 hover:text-slate-300'}
-                          `}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => toggleDepartment(dept.id)}
-                            className="hidden"
-                          />
-                          {isChecked && <Check className="w-3.5 h-3.5" />}
-                          <span className="truncate">{dept.name}</span>
-                        </label>
-                      );
-                    })}
+                    {filteredDepartments.length > 0 ? (
+                      filteredDepartments.map((dept) => {
+                        const isChecked = permissions.departments.includes(dept.id);
+                        return (
+                          <label
+                            key={dept.id}
+                            className={`flex items-center gap-2 p-2.5 rounded-lg border transition-all text-xs cursor-pointer select-none
+                              ${isChecked 
+                                ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400 font-semibold' 
+                                : 'bg-slate-950 border-slate-850 text-slate-400 hover:border-slate-800 hover:text-slate-300'}
+                            `}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleDepartment(dept.id)}
+                              className="hidden"
+                            />
+                            {isChecked && <Check className="w-3.5 h-3.5" />}
+                            <span className="truncate">{dept.name}</span>
+                          </label>
+                        );
+                      })
+                    ) : (
+                      <p className="col-span-full text-xs text-slate-500 text-center py-4 font-semibold">
+                        Please select a branch and location scope to configure Department Access.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

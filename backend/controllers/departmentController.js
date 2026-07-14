@@ -1,15 +1,21 @@
 import departmentRepository from '../repositories/DepartmentRepository.js';
+import branchRepository from '../repositories/BranchRepository.js';
+import locationRepository from '../repositories/LocationRepository.js';
 
 export async function getDepartments(req, res) {
   try {
-    const { page, limit, search, sortBy, sortOrder, branch } = req.query;
+    const { page, limit, search, sortBy, sortOrder, branch, branch_id, location_id, status } = req.query;
 
-    // If no pagination params provided, return full list (backwards compatible)
+    const parsedBranchId = branch_id ? parseInt(branch_id, 10) : (branch ? branch : null);
+    const parsedLocationId = location_id ? parseInt(location_id, 10) : null;
+    const parsedStatus = status !== undefined ? parseInt(status, 10) : null;
+
+    // If no pagination params provided, return full active list (backwards compatible)
     if (!page) {
       const departments =
         req.user.role === 'normal_admin'
-          ? await departmentRepository.findByUserId(req.user.id, branch || '')
-          : await departmentRepository.findAll(branch || '');
+          ? await departmentRepository.findByUserId(req.user.id, parsedBranchId, parsedLocationId)
+          : await departmentRepository.findAll(parsedBranchId, parsedLocationId, parsedStatus);
 
       return res.status(200).json(departments.map((d) => d.toPublic()));
     }
@@ -22,7 +28,9 @@ export async function getDepartments(req, res) {
       page: pageNum,
       limit: limitNum,
       search: search || '',
-      branch: branch || '',
+      branchId: parsedBranchId,
+      locationId: parsedLocationId,
+      status: parsedStatus,
       sortBy: sortBy || 'name',
       sortOrder: sortOrder || 'asc',
       userId: req.user.id,
@@ -50,26 +58,111 @@ export async function getDepartments(req, res) {
 }
 
 export async function createDepartment(req, res) {
-  const { name, branch } = req.body;
+  const { name, branch_id, location_id, status } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ message: 'Department name is required.' });
   }
 
-  if (!branch || !branch.trim()) {
-    return res.status(400).json({ message: 'Branch is required.' });
+  if (!branch_id) {
+    return res.status(400).json({ message: 'Branch selection is required.' });
+  }
+
+  if (!location_id) {
+    return res.status(400).json({ message: 'Location selection is required.' });
   }
 
   try {
-    const existing = await departmentRepository.findByName(name.trim());
-    if (existing) {
-      return res.status(400).json({ message: 'Department already exists.' });
+    const branch = await branchRepository.findById(branch_id);
+    if (!branch) {
+      return res.status(400).json({ message: 'Selected branch does not exist.' });
     }
 
-    const id = await departmentRepository.create(name.trim(), branch.trim());
-    return res.status(201).json({ id, name: name.trim(), branch: branch.trim() });
+    const location = await locationRepository.findById(location_id);
+    if (!location) {
+      return res.status(400).json({ message: 'Selected location does not exist.' });
+    }
+
+    const existing = await departmentRepository.findByNameAndBranchLocation(name.trim(), branch_id, location_id);
+    if (existing) {
+      return res.status(400).json({ message: 'Department already exists under this branch and location.' });
+    }
+
+    const parsedStatus = status !== undefined ? (status ? 1 : 0) : 1;
+    const id = await departmentRepository.create({
+      name: name.trim(),
+      branch_id,
+      location_id,
+      status: parsedStatus
+    });
+
+    return res.status(201).json({
+      id,
+      name: name.trim(),
+      branch_id,
+      location_id,
+      status: !!parsedStatus
+    });
   } catch (error) {
     console.error('Create department error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function updateDepartment(req, res) {
+  const { id } = req.params;
+  const { name, branch_id, location_id, status } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ message: 'Department name is required.' });
+  }
+
+  if (!branch_id) {
+    return res.status(400).json({ message: 'Branch selection is required.' });
+  }
+
+  if (!location_id) {
+    return res.status(400).json({ message: 'Location selection is required.' });
+  }
+
+  try {
+    const dept = await departmentRepository.findById(id);
+    if (!dept) {
+      return res.status(404).json({ message: 'Department not found.' });
+    }
+
+    const branch = await branchRepository.findById(branch_id);
+    if (!branch) {
+      return res.status(400).json({ message: 'Selected branch does not exist.' });
+    }
+
+    const location = await locationRepository.findById(location_id);
+    if (!location) {
+      return res.status(400).json({ message: 'Selected location does not exist.' });
+    }
+
+    const existing = await departmentRepository.findByNameAndBranchLocation(name.trim(), branch_id, location_id);
+    if (existing && existing.id !== parseInt(id, 10)) {
+      return res.status(400).json({ message: 'Department already exists under this branch and location.' });
+    }
+
+    const parsedStatus = status !== undefined ? (status ? 1 : 0) : 1;
+    await departmentRepository.update(id, {
+      name: name.trim(),
+      branch_id,
+      location_id,
+      status: parsedStatus
+    });
+
+    return res.status(200).json({
+      id,
+      name: name.trim(),
+      branch_id,
+      location_id,
+      status: !!parsedStatus
+    });
+  } catch (error) {
+    console.error('Update department error:', error);
     return res.status(500).json({ message: 'Internal server error.' });
   }
 }
@@ -78,6 +171,11 @@ export async function deleteDepartment(req, res) {
   const { id } = req.params;
 
   try {
+    const dept = await departmentRepository.findById(id);
+    if (!dept) {
+      return res.status(404).json({ message: 'Department not found.' });
+    }
+
     const hasDoctors = await departmentRepository.hasDoctors(id);
     if (hasDoctors) {
       return res.status(400).json({

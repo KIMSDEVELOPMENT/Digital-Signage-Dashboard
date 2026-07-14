@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../../app/context/AuthContext';
 import api from '../../../common/services/api';
-import { BRANCH_LOCATIONS, BRANCHES } from '../../../common/utils';
-import { Plus, Trash2, Search, Image, Camera, X } from 'lucide-react';
+import { Plus, Trash2, Search, Image, Camera, X, Edit2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { TableSkeleton } from '../../../common/components/Skeleton';
 import Pagination from '../../../common/components/Pagination';
 import Modal from '../../../common/components/Modal';
@@ -11,7 +10,20 @@ import { toast } from 'react-hot-toast';
 const Doctor = () => {
   const { user, hasPermission } = useAuth();
   const [doctors, setDoctors] = useState([]);
+  
+  // Dynamic masters
+  const [branches, setBranches] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [departments, setDepartments] = useState([]);
+
+  // Filter dropdown sources
+  const [filterLocationsList, setFilterLocationsList] = useState([]);
+  const [filterDepartmentsList, setFilterDepartmentsList] = useState([]);
+
+  // Form dropdown sources
+  const [formLocationsList, setFormLocationsList] = useState([]);
+  const [formDepartmentsList, setFormDepartmentsList] = useState([]);
+
   const [loading, setLoading] = useState(true);
   
   // Search & Filter state
@@ -20,53 +32,104 @@ const Doctor = () => {
   const [filterLocation, setFilterLocation] = useState('');
   const [filterDept, setFilterDept] = useState('');
   
-  // Pagination state
+  // Pagination & Sorting state
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [pagination, setPagination] = useState(null);
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
 
-  // Add Doctor Modal state
+  // Modal / Form states
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingDoctor, setEditingDoctor] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     employee_id: '',
     name: '',
     designation: '',
     department_id: '',
-    branch: '',
-    location: '',
+    branch_id: '',
+    location_id: '',
+    status: true,
   });
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
 
-  // Debounce timer ref
   const debounceRef = useRef(null);
 
-  // Determine allowed branches & locations for normal admin form dropdown
-  const allowedBranches = user.role === 'super_admin' 
-    ? BRANCHES 
-    : (user.permissions?.branches || []);
+  // 1. Fetch dynamic masters for form & filtering dropdowns
+  const fetchMasters = useCallback(async () => {
+    try {
+      const branchesRes = await api.get('/branches?status=1');
+      setBranches(branchesRes.data);
 
-  const getFilteredFormLocations = () => {
-    if (!formData.branch) return [];
-    if (user.role === 'super_admin') return BRANCH_LOCATIONS[formData.branch] || [];
-    
-    // Normal admin: filter assigned locations by the selected branch
-    return (user.permissions?.locations || [])
-      .filter(l => l.branch === formData.branch)
-      .map(l => l.location);
-  };
+      const locationsRes = await api.get('/locations?status=1');
+      setLocations(locationsRes.data);
 
-  const getFilteredFilterLocations = () => {
-    if (!filterBranch) return [];
-    if (user.role === 'super_admin') return BRANCH_LOCATIONS[filterBranch] || [];
-    return (user.permissions?.locations || [])
-      .filter(l => l.branch === filterBranch)
-      .map(l => l.location);
-  };
+      const departmentsRes = await api.get('/departments?status=1');
+      setDepartments(departmentsRes.data);
+    } catch (err) {
+      console.error('Error fetching masters:', err);
+      toast.error('Failed to load doctor configuration masters.');
+    }
+  }, []);
 
+  useEffect(() => {
+    fetchMasters();
+  }, [fetchMasters]);
+
+  // Determine allowed branches for Normal Admin
+  const allowedBranches = user.role === 'super_admin'
+    ? branches
+    : branches.filter((b) => (user.permissions?.branches || []).includes(b.name));
+
+  // Handle selected branch change in form: loads locations under selected branch
+  useEffect(() => {
+    if (formData.branch_id) {
+      const bid = parseInt(formData.branch_id, 10);
+      const filteredLocs = locations.filter((l) => l.branch_id === bid);
+      setFormLocationsList(filteredLocs);
+    } else {
+      setFormLocationsList([]);
+    }
+  }, [formData.branch_id, locations]);
+
+  // Handle selected location change in form: loads departments under selected location
+  useEffect(() => {
+    if (formData.location_id) {
+      const lid = parseInt(formData.location_id, 10);
+      const filteredDepts = departments.filter((d) => d.location_id === lid);
+      setFormDepartmentsList(filteredDepts);
+    } else {
+      setFormDepartmentsList([]);
+    }
+  }, [formData.location_id, departments]);
+
+  // Handle branch selection in list filtering: loads locations under branch, resets location selection
+  useEffect(() => {
+    if (filterBranch) {
+      const bid = parseInt(filterBranch, 10);
+      const filteredLocs = locations.filter((l) => l.branch_id === bid);
+      setFilterLocationsList(filteredLocs);
+    } else {
+      setFilterLocationsList([]);
+    }
+    setFilterLocation('');
+  }, [filterBranch, locations]);
+
+  // Handle location selection in list filtering: loads departments under location, resets department selection
+  useEffect(() => {
+    if (filterLocation) {
+      const lid = parseInt(filterLocation, 10);
+      const filteredDepts = departments.filter((d) => d.location_id === lid);
+      setFilterDepartmentsList(filteredDepts);
+    } else {
+      setFilterDepartmentsList([]);
+    }
+    setFilterDept('');
+  }, [filterLocation, departments]);
+
+  // Fetch doctors listing
   const fetchDoctors = useCallback(async (currentSearch) => {
     try {
       setLoading(true);
@@ -78,8 +141,8 @@ const Doctor = () => {
       };
       
       if (currentSearch) params.search = currentSearch;
-      if (filterBranch) params.branch = filterBranch;
-      if (filterLocation) params.location = filterLocation;
+      if (filterBranch) params.branch_id = filterBranch;
+      if (filterLocation) params.location_id = filterLocation;
       if (filterDept) params.department_id = filterDept;
       
       const res = await api.get('/doctors', { params });
@@ -87,31 +150,17 @@ const Doctor = () => {
       setPagination(res.data.pagination);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load doctors.');
+      toast.error('Failed to load doctors list.');
     } finally {
       setLoading(false);
     }
   }, [page, limit, sortBy, sortOrder, filterBranch, filterLocation, filterDept]);
 
-  const fetchDepartments = async () => {
-    try {
-      const res = await api.get('/departments');
-      setDepartments(res.data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Fetch when page, limit, sort, or filters change
+  // Refetch on pagination/filter changes
   useEffect(() => {
     fetchDoctors(search);
   }, [page, limit, sortBy, sortOrder, filterBranch, filterLocation, filterDept]);
 
-  useEffect(() => {
-    fetchDepartments();
-  }, []);
-
-  // Debounced search
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearch(value);
@@ -143,15 +192,6 @@ const Doctor = () => {
     setPage(1);
   };
 
-  const handleBranchChange = (e) => {
-    const branch = e.target.value;
-    setFormData({
-      ...formData,
-      branch,
-      location: '', // Reset location when branch changes
-    });
-  };
-
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -178,50 +218,100 @@ const Doctor = () => {
       name: '',
       designation: '',
       department_id: '',
-      branch: '',
-      location: '',
+      branch_id: '',
+      location_id: '',
+      status: true,
     });
     setPhotoFile(null);
     setPhotoPreview('');
+    setEditingDoctor(null);
   };
 
   const handleAddDoctor = async (e) => {
     e.preventDefault();
-    const { employee_id, name, designation, department_id, branch, location } = formData;
+    const { employee_id, name, designation, department_id, branch_id, location_id, status } = formData;
 
-    if (!employee_id || !name || !designation || !department_id || !branch || !location) {
-      toast.error('All fields are required.');
+    if (!employee_id || !name || !designation || !department_id || !branch_id || !location_id) {
+      toast.error('All form fields are required.');
       return;
     }
-    if (!photoFile) {
+    if (!editingDoctor && !photoFile) {
       toast.error('Please upload a doctor photo.');
       return;
     }
 
     setSubmitting(true);
-    const loadToast = toast.loading('Adding doctor...');
+    const loadToast = toast.loading(editingDoctor ? 'Saving changes...' : 'Registering doctor...');
 
     const submissionData = new FormData();
     submissionData.append('employee_id', employee_id.trim());
     submissionData.append('name', name.trim());
     submissionData.append('designation', designation.trim());
     submissionData.append('department_id', department_id);
-    submissionData.append('branch', branch);
-    submissionData.append('location', location);
-    submissionData.append('photo', photoFile);
+    submissionData.append('branch_id', branch_id);
+    submissionData.append('location_id', location_id);
+    submissionData.append('status', status ? '1' : '0');
+    if (photoFile) {
+      submissionData.append('photo', photoFile);
+    }
 
     try {
-      await api.post('/doctors', submissionData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      toast.success('Doctor added successfully!', { id: loadToast });
+      if (editingDoctor) {
+        await api.put(`/doctors/${editingDoctor.id}`, submissionData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        toast.success('Doctor details updated successfully!', { id: loadToast });
+      } else {
+        await api.post('/doctors', submissionData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        toast.success('Doctor registered successfully!', { id: loadToast });
+      }
       setIsModalOpen(false);
       resetForm();
       fetchDoctors(search);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Error adding doctor.', { id: loadToast });
+      toast.error(err.response?.data?.message || 'Error processing request.', { id: loadToast });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleEdit = (doc) => {
+    setEditingDoctor(doc);
+    setFormData({
+      employee_id: doc.employee_id,
+      name: doc.name,
+      designation: doc.designation,
+      department_id: String(doc.department_id),
+      branch_id: String(doc.branch_id),
+      location_id: String(doc.location_id),
+      status: doc.status,
+    });
+    setPhotoPreview(getFullPhotoUrl(doc.photo_url));
+    setIsModalOpen(true);
+  };
+
+  const handleToggleStatus = async (doc) => {
+    const newStatus = !doc.status;
+    const loadToast = toast.loading('Updating status...');
+    try {
+      const submissionData = new FormData();
+      submissionData.append('employee_id', doc.employee_id);
+      submissionData.append('name', doc.name);
+      submissionData.append('designation', doc.designation);
+      submissionData.append('department_id', String(doc.department_id));
+      submissionData.append('branch_id', String(doc.branch_id));
+      submissionData.append('location_id', String(doc.location_id));
+      submissionData.append('status', newStatus ? '1' : '0');
+
+      await api.put(`/doctors/${doc.id}`, submissionData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      toast.success(`Doctor status set to ${newStatus ? 'Active' : 'Inactive'}!`, { id: loadToast });
+      fetchDoctors(search);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update status.', { id: loadToast });
     }
   };
 
@@ -232,7 +322,6 @@ const Doctor = () => {
     try {
       await api.delete(`/doctors/${id}`);
       toast.success('Doctor profile deleted successfully!', { id: loadToast });
-      // If we deleted the last item on the current page, go back one page
       if (doctors.length === 1 && page > 1) {
         setPage(page - 1);
       } else {
@@ -253,8 +342,12 @@ const Doctor = () => {
     return sortOrder === 'asc' ? ' ↑' : ' ↓';
   };
 
+  const canCreate = hasPermission('Doctor', 'create');
+  const canUpdate = hasPermission('Doctor', 'update');
+  const canDelete = hasPermission('Doctor', 'delete');
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       {/* Controls & Search bar */}
       <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
         
@@ -280,14 +373,13 @@ const Doctor = () => {
               value={filterBranch}
               onChange={(e) => {
                 setFilterBranch(e.target.value);
-                setFilterLocation('');
                 setPage(1);
               }}
               className="appearance-none pl-3 pr-8 py-2.5 rounded-xl text-xs bg-slate-900/40 border border-slate-800 text-slate-300 focus:border-emerald-500/60 focus:outline-none font-semibold cursor-pointer"
             >
               <option value="">All Branches</option>
               {allowedBranches.map((b) => (
-                <option key={b} value={b}>{b}</option>
+                <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </select>
           </div>
@@ -304,8 +396,8 @@ const Doctor = () => {
               className="appearance-none pl-3 pr-8 py-2.5 rounded-xl text-xs bg-slate-900/40 border border-slate-800 text-slate-300 focus:border-emerald-500/60 focus:outline-none font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               <option value="">All Locations</option>
-              {getFilteredFilterLocations().map((loc) => (
-                <option key={loc} value={loc}>{loc}</option>
+              {filterLocationsList.map((loc) => (
+                <option key={loc.id} value={loc.id}>{loc.name}</option>
               ))}
             </select>
           </div>
@@ -314,21 +406,22 @@ const Doctor = () => {
           <div className="relative">
             <select
               value={filterDept}
+              disabled={!filterLocation}
               onChange={(e) => {
                 setFilterDept(e.target.value);
                 setPage(1);
               }}
-              className="appearance-none pl-3 pr-8 py-2.5 rounded-xl text-xs bg-slate-900/40 border border-slate-800 text-slate-300 focus:border-emerald-500/60 focus:outline-none font-semibold cursor-pointer"
+              className="appearance-none pl-3 pr-8 py-2.5 rounded-xl text-xs bg-slate-900/40 border border-slate-800 text-slate-300 focus:border-emerald-500/60 focus:outline-none font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               <option value="">All Departments</option>
-              {departments.map((d) => (
+              {filterDepartmentsList.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
           </div>
 
           {/* Add Doctor Button */}
-          {hasPermission('Doctor', 'create') && (
+          {canCreate && (
             <button
               onClick={() => setIsModalOpen(true)}
               className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-semibold text-xs text-slate-950 bg-emerald-400 hover:bg-emerald-300 transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-400/5 ml-auto xl:ml-0"
@@ -342,7 +435,7 @@ const Doctor = () => {
 
       {/* Main Table */}
       {loading ? (
-        <TableSkeleton rows={6} cols={6} />
+        <TableSkeleton rows={6} cols={7} />
       ) : (
         <div className="glass-panel rounded-2xl border border-slate-800/40 overflow-hidden">
           <div className="overflow-x-auto">
@@ -379,7 +472,13 @@ const Doctor = () => {
                   >
                     Area / Location{getSortIcon('branch')}
                   </th>
-                  {hasPermission('Doctor', 'delete') && <th className="px-6 py-4 text-right">Actions</th>}
+                  <th
+                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
+                    onClick={() => handleSort('status')}
+                  >
+                    Status{getSortIcon('status')}
+                  </th>
+                  <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-850/30 text-sm">
@@ -419,8 +518,30 @@ const Doctor = () => {
                           <span className="text-[10px] text-slate-500 font-medium">{doc.location}</span>
                         </div>
                       </td>
-                      {hasPermission('Doctor', 'delete') && (
-                        <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => handleToggleStatus(doc)}
+                          disabled={!canUpdate}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                            doc.status
+                              ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15'
+                              : 'bg-rose-500/5 border-rose-500/10 text-rose-400 hover:bg-rose-500/15'
+                          }`}
+                        >
+                          {doc.status ? 'Active' : 'Inactive'}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 text-right space-x-2">
+                        {canUpdate && (
+                          <button
+                            onClick={() => handleEdit(doc)}
+                            className="p-2 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-slate-800 hover:text-white hover:border-slate-700 transition-all cursor-pointer"
+                            title="Edit Doctor"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canDelete && (
                           <button
                             onClick={() => handleDeleteDoctor(doc.id, doc.name)}
                             className="p-2 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 transition-all cursor-pointer"
@@ -428,14 +549,14 @@ const Doctor = () => {
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
-                        </td>
-                      )}
+                        )}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={hasPermission('Doctor', 'delete') ? 6 : 5} className="px-6 py-16 text-center text-slate-500 font-medium">
-                      {search || filterBranch || filterDept
+                    <td colSpan={7} className="px-6 py-16 text-center text-slate-500 font-medium">
+                      {search || filterBranch || filterLocation || filterDept
                         ? 'No doctors match your search criteria.'
                         : 'No doctors found. Add a doctor to get started.'}
                     </td>
@@ -455,14 +576,14 @@ const Doctor = () => {
         </div>
       )}
 
-      {/* Add Doctor Modal */}
+      {/* Add / Edit Doctor Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
           resetForm();
         }}
-        title="Register New Doctor"
+        title={editingDoctor ? 'Edit Doctor Profile' : 'Register New Doctor'}
       >
         <form onSubmit={handleAddDoctor} className="space-y-5">
           {/* Photo Upload with Preview */}
@@ -539,53 +660,76 @@ const Doctor = () => {
               />
             </div>
 
-            {/* Department */}
+            {/* Branch */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">DEPARTMENT</label>
+              <label className="text-xs font-semibold text-slate-300">BRANCH</label>
               <select
-                value={formData.department_id}
-                onChange={(e) => setFormData({ ...formData, department_id: e.target.value })}
+                value={formData.branch_id}
+                onChange={(e) => setFormData({ ...formData, branch_id: e.target.value, department_id: '', location_id: '' })}
                 className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 cursor-pointer"
               >
-                <option value="">Select Department</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
+                <option value="">Select Branch</option>
+                {allowedBranches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {/* Branch */}
+            {/* Location (dynamically loaded based on branch) */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">BRANCH</label>
+              <label className="text-xs font-semibold text-slate-300">LOCATION</label>
               <select
-                value={formData.branch}
-                onChange={handleBranchChange}
-                className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 cursor-pointer"
+                value={formData.location_id}
+                disabled={!formData.branch_id}
+                onChange={(e) => setFormData({ ...formData, location_id: e.target.value, department_id: '' })}
+                className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                <option value="">Select Branch</option>
-                {allowedBranches.map((b) => (
-                  <option key={b} value={b}>{b}</option>
+                <option value="">
+                  {!formData.branch_id ? 'Select Branch first...' : 'Select Location'}
+                </option>
+                {formLocationsList.map((loc) => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
                 ))}
               </select>
             </div>
 
-            {/* Location */}
+            {/* Department (dynamically loaded based on location) */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">LOCATION</label>
+              <label className="text-xs font-semibold text-slate-300">DEPARTMENT</label>
               <select
-                value={formData.location}
-                disabled={!formData.branch}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                value={formData.department_id}
+                disabled={!formData.location_id}
+                onChange={(e) => setFormData({ ...formData, department_id: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                <option value="">Select Location</option>
-                {getFilteredFormLocations().map((loc) => (
-                  <option key={loc} value={loc}>{loc}</option>
+                <option value="">
+                  {!formData.location_id ? 'Select Location first...' : 'Select Department'}
+                </option>
+                {formDepartmentsList.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-350 uppercase tracking-wider mb-2">
+              Active Status
+            </label>
+            <button
+              type="button"
+              onClick={() => setFormData({ ...formData, status: !formData.status })}
+              className="flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              {formData.status ? (
+                <ToggleRight className="w-8 h-8 text-emerald-400" />
+              ) : (
+                <ToggleLeft className="w-8 h-8 text-slate-500" />
+              )}
+              {formData.status ? 'Active' : 'Inactive'}
+            </button>
           </div>
 
           {/* Buttons */}
@@ -596,7 +740,7 @@ const Doctor = () => {
                 setIsModalOpen(false);
                 resetForm();
               }}
-              className="flex-1 py-2.5 rounded-xl border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-colors font-semibold text-sm"
+              className="flex-1 py-2.5 rounded-xl border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-colors font-semibold text-sm cursor-pointer"
             >
               Cancel
             </button>
@@ -605,7 +749,7 @@ const Doctor = () => {
               disabled={submitting}
               className="flex-1 py-2.5 rounded-xl font-semibold text-sm text-slate-950 bg-emerald-400 hover:bg-emerald-300 disabled:bg-emerald-500/50 disabled:text-slate-900/40 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-400/5"
             >
-              Save Doctor
+              {editingDoctor ? 'Save Changes' : 'Register Doctor'}
             </button>
           </div>
         </form>

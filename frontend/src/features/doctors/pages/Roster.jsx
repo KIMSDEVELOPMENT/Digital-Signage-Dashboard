@@ -154,6 +154,7 @@ const Roster = () => {
     const loadToast = toast.loading("Saving today's roster...");
 
     const rosterData = previewRows.map(row => ({
+      doctor_id: row.doctor_id,
       employee_id: row.employee_id,
       timing: row.timing
     }));
@@ -275,7 +276,7 @@ const Roster = () => {
               <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800/40 text-xs text-slate-400 space-y-2 leading-relaxed">
                 <p className="font-semibold text-slate-300">Spreadsheet Template Rules:</p>
                 <ul className="list-disc pl-4 space-y-1">
-                  <li>Must contain exact columns in order: <code className="text-[10px] text-emerald-400 px-1 bg-emerald-400/5 border border-emerald-500/10 rounded">Date, Site Name, Block Name, Department, Doctor Name, Timing</code></li>
+                  <li>Must contain exact columns in order: <code className="text-[10px] text-emerald-400 px-1 bg-emerald-400/5 border border-emerald-500/10 rounded">Date, Site Name, Block Name, Department Name, Doctor Name, Timing</code></li>
                   <li>Site Name must match the selected branch.</li>
                   <li>All doctors scheduled must already be registered in the directory for the branch.</li>
                   <li>Importing will replace any existing roster for this branch for today.</li>
