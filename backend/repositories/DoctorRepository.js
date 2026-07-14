@@ -1,4 +1,4 @@
-import { getPool } from '../config/db.js';
+import { getPool } from '../migrations/db.js';
 import { Doctor } from '../models/Doctor.js';
 
 /**
@@ -82,6 +82,17 @@ export class DoctorRepository {
     const pool = getPool();
     const [result] = await pool.query('DELETE FROM doctors WHERE id = ?', [id]);
     return result.affectedRows;
+  }
+
+  async findByNameBranchDepartment(name, branch, departmentId) {
+    const pool = getPool();
+    const [rows] = await pool.query(
+      `SELECT doc.*, dept.name AS department_name 
+       FROM doctors doc JOIN departments dept ON doc.department_id = dept.id
+       WHERE LOWER(doc.name) = LOWER(?) AND LOWER(doc.branch) = LOWER(?) AND doc.department_id = ?`,
+      [name, branch, departmentId]
+    );
+    return rows.length > 0 ? new Doctor(rows[0]) : null;
   }
 }
 

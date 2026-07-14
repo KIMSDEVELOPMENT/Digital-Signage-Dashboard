@@ -90,10 +90,43 @@ export const AuthProvider = ({ children }) => {
     return user.permissions?.departments || [];
   };
 
+  const [branchLocations, setBranchLocations] = useState({});
+  const [branches, setBranches] = useState([]);
+  const [allLocations, setAllLocations] = useState([]);
+
+  useEffect(() => {
+    api.get('/config/branches-locations')
+      .then((res) => {
+        const data = res.data;
+        const bl = {};
+        const bSet = new Set();
+        const lSet = new Set();
+        data.forEach(item => {
+          const b = item.branch;
+          const l = item.location;
+          bSet.add(b);
+          lSet.add(l);
+          if (!bl[b]) {
+            bl[b] = [];
+          }
+          if (!bl[b].includes(l)) {
+            bl[b].push(l);
+          }
+        });
+        setBranchLocations(bl);
+        setBranches(Array.from(bSet));
+        setAllLocations(Array.from(lSet));
+      })
+      .catch((err) => {
+        console.error('Failed to fetch branches locations configuration:', err);
+      });
+  }, []);
+
   return (
     <AuthContext.Provider value={{ 
       user, loading, login, logout, 
-      hasPermission, getAssignedBranches, getAssignedLocations, getAssignedDepartments 
+      hasPermission, getAssignedBranches, getAssignedLocations, getAssignedDepartments,
+      branchLocations, branches, allLocations
     }}>
       {children}
     </AuthContext.Provider>

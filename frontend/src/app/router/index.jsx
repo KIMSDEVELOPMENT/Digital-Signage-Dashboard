@@ -32,6 +32,7 @@ const AppRoutes = () => {
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/display" element={<DisplayScreen />} />
+        <Route path="/display/:branch/:location" element={<DisplayScreen />} />
 
         {/* Protected Dashboard Routes (Shared by Super Admin and Normal Admin based on permissions) */}
         <Route element={<ProtectedRoute />}>

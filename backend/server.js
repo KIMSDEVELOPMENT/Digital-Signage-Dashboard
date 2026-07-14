@@ -6,12 +6,13 @@ import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { initializeDatabase } from './config/db.js';
+import { initializeDatabase } from './migrations/db.js';
 import authRoutes from './routes/authRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import rosterRoutes from './routes/rosterRoutes.js';
+import configRoutes from './routes/configRoutes.js';
 
 dotenv.config();
 
@@ -39,6 +40,7 @@ app.use('/api/departments', departmentRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/admins', adminRoutes);
 app.use('/api/roster', rosterRoutes);
+app.use('/api/config', configRoutes);
 
 // Root route
 app.get('/', (req, res) => {

@@ -1,16 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../../../app/context/AuthContext';
 import api from '../../../common/services/api';
-import { BRANCH_LOCATIONS, BRANCHES } from '../../../common/utils';
-import { Clock, Calendar, MapPin, Building2, User, ChevronRight, MonitorPlay } from 'lucide-react';
+import { Clock, Calendar, MapPin, Building2, User, MonitorPlay } from 'lucide-react';
 import logoImg from '../../../common/assets/kims-logo.png';
 
+const formatLocationForUrl = (loc) => {
+  if (!loc) return '';
+  return loc
+    .toUpperCase()
+    .replace(/[\s/]+/g, '-')
+    .replace(/-+/g, '-');
+};
+
 const DisplayScreen = () => {
+  const { branch: paramBranch, location: paramLocation } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const branch = searchParams.get('branch');
-  const location = searchParams.get('location');
+  const { user, getAssignedLocations, branches, branchLocations } = useAuth();
+
+  const branch = paramBranch || searchParams.get('branch');
+  const location = paramLocation || searchParams.get('location');
+
+  const assignedLocs = getAssignedLocations() || [];
 
   // Clock state
   const [time, setTime] = useState(new Date());
@@ -20,56 +33,161 @@ const DisplayScreen = () => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Setup ticking clock
+  // Ref to keep track of roster to prevent polling re-renders
+  const rosterRef = useRef([]);
+
+  // Selection state
+  const [selectedBranch, setSelectedBranch] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState('');
+
+  // Clock ticking
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch roster
+  // Automatic redirect if normal admin has exactly one location privilege
+  useEffect(() => {
+    if (user && user.role === 'normal_admin' && (!branch || !location)) {
+      if (assignedLocs.length === 1) {
+        const targetBranch = assignedLocs[0].branch;
+        const targetLoc = assignedLocs[0].location;
+        navigate(`/display/${targetBranch}/${formatLocationForUrl(targetLoc)}`);
+      }
+    }
+  }, [user, branch, location, assignedLocs, navigate]);
+
+  // Global scrollbar hiding for TV display
+  useEffect(() => {
+    if (branch && location) {
+      const style = document.createElement('style');
+      style.innerHTML = `
+        body, html {
+          overflow: hidden !important;
+        }
+        ::-webkit-scrollbar {
+          display: none !important;
+        }
+      `;
+      document.head.appendChild(style);
+      return () => {
+        document.head.removeChild(style);
+      };
+    }
+  }, [branch, location]);
+
+  // Fetch and poll roster
   useEffect(() => {
     if (!branch || !location) return;
 
-    const fetchRoster = async () => {
+    const fetchRoster = async (isPoll = false) => {
       try {
-        setLoading(true);
+        if (!isPoll) setLoading(true);
         const res = await api.get('/roster/today', {
           params: { branch, location }
         });
-        setRoster(res.data);
-        setActiveIndex(0);
+
+        // Prevent flicker by only updating state when roster data changes
+        const resDataStr = JSON.stringify(res.data);
+        const currentDataStr = JSON.stringify(rosterRef.current);
+        if (resDataStr !== currentDataStr) {
+          setRoster(res.data);
+          rosterRef.current = res.data;
+          setActiveIndex(0);
+        }
       } catch (err) {
         console.error('Error fetching display roster:', err);
       } finally {
-        setLoading(false);
+        if (!isPoll) setLoading(false);
       }
     };
 
-    fetchRoster();
-    // Poll for changes every 30 seconds
-    const pollTimer = setInterval(fetchRoster, 30000);
+    fetchRoster(false);
+
+    // Polling every 10 seconds for real-time roster changes
+    const pollTimer = setInterval(() => fetchRoster(true), 10000);
     return () => clearInterval(pollTimer);
   }, [branch, location]);
 
-  // Slideshow rotation
+  // Group and partition doctors by department (max 3 doctors per page)
+  const getPages = () => {
+    const deptGroups = {};
+    roster.forEach(doc => {
+      const dept = doc.department_name;
+      if (!deptGroups[dept]) {
+        deptGroups[dept] = [];
+      }
+      deptGroups[dept].push(doc);
+    });
+
+    const pages = [];
+    Object.keys(deptGroups).sort().forEach(dept => {
+      const docs = deptGroups[dept];
+      const chunkSize = 3;
+      for (let i = 0; i < docs.length; i += chunkSize) {
+        pages.push({
+          department: dept,
+          pageIndex: Math.floor(i / chunkSize) + 1,
+          totalPages: Math.ceil(docs.length / chunkSize),
+          doctors: docs.slice(i, i + chunkSize)
+        });
+      }
+    });
+
+    return pages;
+  };
+
+  const pages = getPages();
+
+  // Rotation logic - 4 second delay
   useEffect(() => {
-    if (roster.length <= 1) return;
+    if (pages.length <= 1) return;
 
     const rotationTimer = setInterval(() => {
-      setActiveIndex((prevIndex) => (prevIndex + 1) % roster.length);
-    }, 5000); // Rotate every 5 seconds
+      setActiveIndex((prev) => (prev + 1) % pages.length);
+    }, 4000);
 
     return () => clearInterval(rotationTimer);
-  }, [roster]);
+  }, [pages.length]);
 
-  // Handle display selection (for Super Admins/unspecified params)
-  const [selectedBranch, setSelectedBranch] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState('');
+  // Background Image Preloading
+  useEffect(() => {
+    if (pages.length === 0) return;
+    const nextPageIndex = (activeIndex + 1) % pages.length;
+    const nextSlide = pages[nextPageIndex];
+    if (nextSlide && nextSlide.doctors) {
+      nextSlide.doctors.forEach(doc => {
+        if (doc.photo_url) {
+          const img = new Image();
+          img.src = `http://localhost:5000${doc.photo_url}`;
+        }
+      });
+    }
+  }, [activeIndex, pages]);
+
+  // Filter dropdown selections based on user privilege
+  let displayBranches = branches;
+  let displayLocations = [];
+
+  if (user && user.role === 'normal_admin') {
+    const uniqueBranches = Array.from(new Set(assignedLocs.map(al => al.branch)));
+    displayBranches = uniqueBranches;
+    if (selectedBranch) {
+      displayLocations = assignedLocs
+        .filter(al => al.branch.toLowerCase() === selectedBranch.toLowerCase())
+        .map(al => al.location);
+    }
+  } else {
+    displayBranches = branches;
+    if (selectedBranch) {
+      displayLocations = branchLocations[selectedBranch] || [];
+    }
+  }
 
   const launchSignage = (e) => {
     e.preventDefault();
     if (selectedBranch && selectedLocation) {
-      navigate(`/display?branch=${encodeURIComponent(selectedBranch)}&location=${encodeURIComponent(selectedLocation)}`);
+      navigate(`/display/${selectedBranch}/${formatLocationForUrl(selectedLocation)}`);
     }
   };
 
@@ -78,7 +196,45 @@ const DisplayScreen = () => {
     return `http://localhost:5000${url}`;
   };
 
-  // Render selection panel if branch or location are missing
+  // Header Branding dynamic adaptation
+  const getBranding = (b) => {
+    if (!b) return { title: 'KIMS DIGITAL SIGNAGE SYSTEM', subtitle: 'HOSPITAL BOARD' };
+    const upper = b.toUpperCase();
+    if (upper === 'PBMH') {
+      return {
+        title: 'Pradyumna Bal Memorial Hospital',
+        subtitle: 'KIMS'
+      };
+    } else if (upper === 'SSCC') {
+      return {
+        title: 'KIMS Super Speciality & Cancer Centre',
+        subtitle: 'SSCC'
+      };
+    } else if (upper === 'DENTAL' || upper === 'KIDS') {
+      return {
+        title: 'Kalinga Institute of Dental Sciences',
+        subtitle: 'KIDS'
+      };
+    }
+    return {
+      title: 'Kalinga Institute of Medical Sciences',
+      subtitle: b.toUpperCase()
+    };
+  };
+
+  // Get resolved locations from DB lookup
+  const getDisplayLocation = (b, loc) => {
+    if (!loc) return '';
+    const targetNorm = loc.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const branchLocationsForBranch = branchLocations[b];
+    if (branchLocationsForBranch) {
+      const matched = branchLocationsForBranch.find(l => l.toUpperCase().replace(/[^A-Z0-9]/g, '') === targetNorm);
+      if (matched) return matched;
+    }
+    return loc.replace(/-/g, ' ').toUpperCase();
+  };
+
+  // Render selection dashboard if branch or location are not specified
   if (!branch || !location) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 relative overflow-hidden font-sans">
@@ -102,7 +258,7 @@ const DisplayScreen = () => {
                 className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 cursor-pointer"
               >
                 <option value="">Select Branch</option>
-                {BRANCHES.map(b => (
+                {displayBranches.map(b => (
                   <option key={b} value={b}>{b}</option>
                 ))}
               </select>
@@ -117,7 +273,7 @@ const DisplayScreen = () => {
                 className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 <option value="">Select Location</option>
-                {selectedBranch && BRANCH_LOCATIONS[selectedBranch].map(loc => (
+                {displayLocations.map(loc => (
                   <option key={loc} value={loc}>{loc}</option>
                 ))}
               </select>
@@ -141,24 +297,25 @@ const DisplayScreen = () => {
   const timeString = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
   const dateString = time.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
 
-  const activeDoc = roster[activeIndex];
+  const branding = getBranding(branch);
+  const activePage = pages[activeIndex];
 
   return (
-    <div className="min-h-screen bg-[#030611] text-white flex flex-col font-sans overflow-hidden select-none select-none relative">
+    <div className="min-h-screen bg-[#030611] text-white flex flex-col font-sans overflow-hidden select-none relative">
       {/* Background gradients */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[150px] pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-500/5 rounded-full blur-[150px] pointer-events-none" />
 
       {/* Header bar */}
       <header className="h-24 glass-panel border-b border-white/5 flex items-center justify-between px-10 z-10 shadow-lg shrink-0">
-        {/* Left: Logo & Hospital Name */}
+        {/* Left: Dynamic logo & Hospital Title */}
         <div className="flex items-center gap-4">
           <img src={logoImg} alt="KIMS Logo" className="w-16 h-16 object-contain" />
           <div>
             <h1 className="font-heading font-extrabold text-xl tracking-tight text-white leading-none">
-              KALINGA INSTITUTE OF MEDICAL SCIENCES
+              {branding.title}
             </h1>
-            <p className="text-xs font-semibold text-emerald-400 tracking-wider mt-1 uppercase">BHUBANESWAR</p>
+            <p className="text-xs font-semibold text-emerald-400 tracking-wider mt-1.5 uppercase">{branding.subtitle}</p>
           </div>
         </div>
 
@@ -166,7 +323,7 @@ const DisplayScreen = () => {
         <div className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 shadow-md">
           <MapPin className="w-5 h-5 text-emerald-400" />
           <span className="text-sm font-bold tracking-wide uppercase text-slate-100">
-            {branch} &mdash; {location}
+            {branch} &mdash; {getDisplayLocation(branch, location)}
           </span>
         </div>
 
@@ -185,161 +342,110 @@ const DisplayScreen = () => {
       </header>
 
       {/* Main Body */}
-      <main className="flex-1 flex p-10 gap-10 overflow-hidden relative">
+      <main className="flex-1 flex p-10 overflow-hidden relative">
         {loading ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-4">
             <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-400 font-semibold text-lg tracking-wide">Syncing signage feeds...</p>
+            <p className="text-slate-400 font-semibold text-lg tracking-wide animate-pulse">Syncing signage feeds...</p>
           </div>
-        ) : roster.length > 0 ? (
-          <>
-            {/* Left: Active Doctor Card Showcase (60%) */}
-            <div className="flex-[3] flex flex-col justify-center relative overflow-hidden h-full">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeDoc?.roster_id || activeIndex}
-                  initial={{ opacity: 0, y: 30, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -30, scale: 0.98 }}
-                  transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                  className="w-full h-[80%] glass-card rounded-[32px] border border-white/10 overflow-hidden shadow-2xl flex relative"
-                >
-                  {/* Glowing active outline */}
-                  <div className="absolute inset-0 border-2 border-emerald-400/20 rounded-[32px] pointer-events-none shadow-[inset_0_0_40px_rgba(16,185,129,0.05)]" />
+        ) : activePage ? (
+          <div className="flex-1 flex flex-col h-full min-h-0">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeIndex}
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -50 }}
+                transition={{ duration: 0.5, ease: 'easeInOut' }}
+                className="w-full flex flex-col h-full min-h-0 space-y-6"
+              >
+                {/* Department Title & Paging */}
+                <div className="flex items-center justify-between border-b border-white/10 pb-4 flex-shrink-0">
+                  <h2 className="text-3xl lg:text-4xl font-heading font-extrabold tracking-tight text-white flex items-center gap-3">
+                    <Building2 className="w-8 h-8 text-emerald-400" />
+                    {activePage.department.toUpperCase()}
+                  </h2>
+                  <span className="px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-sm font-bold">
+                    Page {activePage.pageIndex} of {activePage.totalPages}
+                  </span>
+                </div>
 
-                  {/* Doctor image container */}
-                  <div className="w-[45%] h-full bg-slate-950/40 relative border-r border-white/5 overflow-hidden">
-                    <img
-                      src={getFullPhotoUrl(activeDoc?.photo_url)}
-                      alt={activeDoc?.doctor_name}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[#0c1224] to-transparent" />
-                  </div>
-
-                  {/* Doctor Info details */}
-                  <div className="w-[55%] p-12 flex flex-col justify-between relative bg-gradient-to-br from-slate-900/60 to-slate-950/80">
-                    <div className="space-y-6">
-                      <span className="px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-bold tracking-widest uppercase">
-                        ON DUTY TODAY
-                      </span>
+                {/* Doctors Grid on active page */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 flex-1 min-h-0 overflow-hidden py-2">
+                  {activePage.doctors.map((doc) => (
+                    <div 
+                      key={doc.roster_id}
+                      className="glass-card rounded-3xl border border-white/10 overflow-hidden shadow-2xl flex flex-col h-full bg-slate-900/40 relative"
+                    >
+                      {/* Decorative border */}
+                      <div className="absolute inset-0 border border-emerald-400/10 rounded-3xl pointer-events-none" />
                       
-                      <div className="space-y-2">
-                        <h2 className="text-4xl lg:text-5xl font-heading font-extrabold text-white tracking-tight leading-tight">
-                          {activeDoc?.doctor_name}
-                        </h2>
-                        <p className="text-lg lg:text-xl font-medium text-slate-300">
-                          {activeDoc?.designation}
-                        </p>
+                      {/* Doctor Photo */}
+                      <div className="h-64 xl:h-72 w-full bg-slate-950/60 relative overflow-hidden flex-shrink-0">
+                        {doc.photo_url ? (
+                          <img 
+                            src={getFullPhotoUrl(doc.photo_url)} 
+                            alt={doc.doctor_name} 
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-slate-900">
+                            <User className="w-20 h-20 text-slate-700" />
+                          </div>
+                        )}
+                        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#030611] to-transparent" />
                       </div>
 
-                      <div className="h-[1px] w-2/3 bg-white/5" />
-
-                      <div className="space-y-4">
-                        {/* Department details */}
-                        <div className="flex items-center gap-3 text-slate-350">
-                          <Building2 className="w-5.5 h-5.5 text-emerald-400" />
-                          <span className="text-base font-semibold">{activeDoc?.department_name}</span>
+                      {/* Doctor Details */}
+                      <div className="p-6 xl:p-8 flex flex-col justify-between flex-1 min-h-0 space-y-4">
+                        <div className="space-y-1">
+                          <h3 className="text-xl xl:text-2xl font-extrabold text-white tracking-tight leading-tight">
+                            {doc.doctor_name}
+                          </h3>
+                          <p className="text-sm xl:text-base font-medium text-slate-400">
+                            {doc.designation}
+                          </p>
                         </div>
-
-                        {/* Shift timing details */}
-                        <div className="flex items-center gap-3 text-slate-350">
-                          <Clock className="w-5.5 h-5.5 text-emerald-400" />
-                          <div>
-                            <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">CONSULTATION HOURS</p>
-                            <p className="text-base font-bold text-emerald-400 mt-0.5">{activeDoc?.timing}</p>
+                        
+                        <div className="space-y-2 border-t border-white/5 pt-4">
+                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest block">SHIFT TIMING</span>
+                          <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl w-fit">
+                            <Clock className="w-4 h-4" />
+                            {doc.timing}
                           </div>
                         </div>
                       </div>
                     </div>
-
-                    {/* Bottom slider dots */}
-                    {roster.length > 1 && (
-                      <div className="flex items-center gap-2 mt-auto">
-                        {roster.map((_, idx) => (
-                          <div
-                            key={idx}
-                            className={`h-2 rounded-full transition-all duration-300 ${
-                              activeIndex === idx ? 'w-8 bg-emerald-400' : 'w-2 bg-white/20'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            {/* Right: Roster Queue Queue Preview List (40%) */}
-            <div className="flex-[2] flex flex-col h-full overflow-hidden">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-sm font-extrabold uppercase text-slate-400 tracking-widest">TODAY'S LINEUP</span>
-                <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-[10px] font-bold text-slate-400">
-                  {roster.length} TOTAL
-                </span>
+                  ))}
+                </div>
+              </motion.div>
+            </AnimatePresence>
+            
+            {/* Global navigation dots under department sequence */}
+            {pages.length > 1 && (
+              <div className="flex items-center justify-center gap-2.5 mt-6 py-2 flex-shrink-0">
+                {pages.map((_, idx) => (
+                  <div
+                    key={idx}
+                    className={`h-2.5 rounded-full transition-all duration-300 ${
+                      activeIndex === idx ? 'w-8 bg-emerald-400' : 'w-2.5 bg-white/20'
+                    }`}
+                  />
+                ))}
               </div>
-
-              {/* Scrolling container */}
-              <div className="flex-1 space-y-3.5 overflow-y-auto pr-2">
-                {roster.map((item, idx) => {
-                  const isActive = idx === activeIndex;
-                  return (
-                    <motion.div
-                      key={item.roster_id}
-                      animate={{
-                        borderColor: isActive ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.05)',
-                        backgroundColor: isActive ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.02)',
-                      }}
-                      className={`flex items-center justify-between p-4.5 rounded-2xl border transition-colors shadow-[0_4px_20px_rgba(0,0,0,0.15)]`}
-                    >
-                      <div className="flex items-center gap-4 min-w-0">
-                        {/* Mini photo */}
-                        <div className={`w-12 h-12 rounded-xl overflow-hidden bg-slate-900 border flex-shrink-0 flex items-center justify-center transition-colors ${
-                          isActive ? 'border-emerald-400/40' : 'border-slate-800'
-                        }`}>
-                          <img
-                            src={getFullPhotoUrl(item.photo_url)}
-                            alt={item.doctor_name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className={`text-sm font-bold truncate ${isActive ? 'text-emerald-400' : 'text-slate-200'}`}>
-                            {item.doctor_name}
-                          </h4>
-                          <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
-                            {item.department_name}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="text-right flex-shrink-0">
-                        <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg ${
-                          isActive 
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                            : 'bg-slate-900 text-slate-400 border border-slate-800/60'
-                        }`}>
-                          {item.timing}
-                        </span>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-          </>
+            )}
+          </div>
         ) : (
-          /* Empty / Welcome state */
+          /* Welcome default state when roster is empty */
           <div className="flex-1 flex flex-col items-center justify-center text-center animate-fade-in">
             <div className="w-36 h-36 rounded-3xl bg-slate-900/60 border border-slate-800 flex items-center justify-center p-4 mb-6 shadow-2xl">
-              <img src={logoImg} alt="KIMS Logo" className="w-full h-full object-contain" />
+              <img src={logoImg} alt="KIMS Logo" className="w-full h-full object-contain animate-pulse" />
             </div>
             <h2 className="text-4xl font-heading font-extrabold text-white tracking-tight mb-2">
-              Welcome to KIMS Bhubaneswar
+              Welcome to {branding.title}
             </h2>
             <p className="text-slate-400 max-w-md mx-auto text-base">
-              Clinical schedules for <span className="text-emerald-400 font-semibold uppercase">{branch} - {location}</span> will appear shortly. Please check back soon.
+              Clinical schedules for <span className="text-emerald-400 font-semibold uppercase">{branch} - {getDisplayLocation(branch, location)}</span> will appear shortly. Please check back soon.
             </p>
           </div>
         )}

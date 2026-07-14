@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../app/context/AuthContext';
 import api from '../../../common/services/api';
-import { BRANCH_LOCATIONS, BRANCHES } from '../../../common/utils';
 import { 
   UploadCloud, 
   CheckCircle2, 
@@ -16,11 +15,11 @@ import { TableSkeleton } from '../../../common/components/Skeleton';
 import { toast } from 'react-hot-toast';
 
 const Roster = () => {
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, branches, branchLocations } = useAuth();
   
   // Determine allowed branches & locations for dropdown selection
   const allowedBranches = user.role === 'super_admin' 
-    ? BRANCHES 
+    ? branches 
     : (user.permissions?.branches || []);
 
   // Selection state
@@ -34,13 +33,19 @@ const Roster = () => {
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [importing, setImporting] = useState(false);
 
+  // Dynamic Validation / Duplicate confirmation states
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [duplicateExists, setDuplicateExists] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
   // Auto-select first branch & location on load
   useEffect(() => {
-    if (allowedBranches.length > 0) {
+    if (allowedBranches.length > 0 && !selectedBranch) {
       const defaultBranch = allowedBranches[0];
       setSelectedBranch(defaultBranch);
     }
-  }, [user]);
+  }, [allowedBranches, user]);
 
   const fetchTodayRoster = async () => {
     if (!selectedBranch) return;
@@ -66,6 +71,28 @@ const Roster = () => {
     const branch = e.target.value;
     setSelectedBranch(branch);
     setPreviewRows([]);
+  };
+
+  const downloadRosterTemplate = async () => {
+    if (!selectedBranch) return;
+    const loadToast = toast.loading('Downloading template...');
+    try {
+      const response = await api.get(`/roster/template`, {
+        params: { branch: selectedBranch },
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Roster_Template_${selectedBranch}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('Template downloaded successfully!', { id: loadToast });
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to download roster template.', { id: loadToast });
+    }
   };
 
   const handleFileChange = (e) => {
@@ -95,14 +122,24 @@ const Roster = () => {
     formData.append('file', uploadFile);
 
     try {
-      const res = await api.post('/roster/preview', formData, {
+      const res = await api.post(`/roster/preview?branch=${selectedBranch}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setPreviewRows(res.data);
+      const { duplicateExists, previewData } = res.data;
+      setPreviewRows(previewData);
+      setDuplicateExists(duplicateExists);
       toast.success('Excel records parsed successfully!', { id: loadToast });
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || 'Error parsing Excel sheet.', { id: loadToast });
+      const responseData = err.response?.data;
+      if (responseData?.errors && Array.isArray(responseData.errors)) {
+        setValidationErrors(responseData.errors);
+        setShowValidationModal(true);
+        toast.error('Validation errors found in Excel file.', { id: loadToast });
+      } else {
+        const msg = responseData?.message || 'Error parsing Excel sheet.';
+        toast.error(msg, { id: loadToast });
+      }
       setFile(null);
       setPreviewRows([]);
     } finally {
@@ -110,14 +147,8 @@ const Roster = () => {
     }
   };
 
-  const handleImport = async () => {
+  const handleImport = async (replace = false) => {
     if (previewRows.length === 0) return;
-    
-    const hasErrors = previewRows.some(row => row.status === 'error');
-    if (hasErrors) {
-      toast.error('Import blocked. Please resolve Excel file matching errors first.');
-      return;
-    }
 
     setImporting(true);
     const loadToast = toast.loading("Saving today's roster...");
@@ -128,10 +159,11 @@ const Roster = () => {
     }));
 
     try {
-      await api.post('/roster/import', { roster: rosterData });
+      await api.post('/roster/import', { roster: rosterData, replace });
       toast.success("Today's roster imported successfully!", { id: loadToast });
       setPreviewRows([]);
       setFile(null);
+      setShowConfirmModal(false);
       fetchTodayRoster();
     } catch (err) {
       console.error(err);
@@ -157,10 +189,10 @@ const Roster = () => {
           <h3 className="font-heading font-semibold text-white">Target Display Area</h3>
         </div>
 
-        <div className="grid grid-cols-1 max-w-md">
+        <div className="flex flex-col sm:flex-row items-end gap-4 max-w-xl">
           {/* Branch select */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">BRANCH</label>
+          <div className="space-y-1.5 flex-1 w-full">
+            <label className="text-xs font-semibold text-slate-300 block">BRANCH</label>
             <select
               value={selectedBranch}
               onChange={handleBranchChange}
@@ -172,6 +204,15 @@ const Roster = () => {
               ))}
             </select>
           </div>
+          {selectedBranch && (
+            <button
+              onClick={downloadRosterTemplate}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center gap-2 cursor-pointer h-[42px] transition-colors w-full sm:w-auto justify-center flex-shrink-0"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Download Template
+            </button>
+          )}
         </div>
       </div>
 
@@ -210,12 +251,12 @@ const Roster = () => {
                     <div className="flex gap-2">
                       <button
                         onClick={clearPreview}
-                        className="flex-1 py-2 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors font-semibold text-xs"
+                        className="flex-1 py-2 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors font-semibold text-xs cursor-pointer"
                       >
                         Clear
                       </button>
                       <button
-                        onClick={handleImport}
+                        onClick={() => duplicateExists ? setShowConfirmModal(true) : handleImport(false)}
                         disabled={importing || hasValidationErrors || previewRows.length === 0}
                         className="flex-1 py-2 rounded-lg font-semibold text-xs text-slate-950 bg-emerald-400 hover:bg-emerald-300 disabled:bg-emerald-500/20 disabled:text-slate-500 disabled:cursor-not-allowed transition-all shadow-md shadow-emerald-400/5 cursor-pointer"
                       >
@@ -234,10 +275,10 @@ const Roster = () => {
               <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800/40 text-xs text-slate-400 space-y-2 leading-relaxed">
                 <p className="font-semibold text-slate-300">Spreadsheet Template Rules:</p>
                 <ul className="list-disc pl-4 space-y-1">
-                  <li>Must contain column: <code className="text-[10px] text-emerald-400 px-1 bg-emerald-400/5 border border-emerald-500/10 rounded">Employee ID</code></li>
-                  <li>Must contain column: <code className="text-[10px] text-emerald-400 px-1 bg-emerald-400/5 border border-emerald-500/10 rounded">Timing</code></li>
-                  <li>All doctors scheduled must already be registered in the directory.</li>
-                  <li>Importing will replace any existing roster for this screen for today.</li>
+                  <li>Must contain exact columns in order: <code className="text-[10px] text-emerald-400 px-1 bg-emerald-400/5 border border-emerald-500/10 rounded">Date, Site Name, Block Name, Department, Doctor Name, Timing</code></li>
+                  <li>Site Name must match the selected branch.</li>
+                  <li>All doctors scheduled must already be registered in the directory for the branch.</li>
+                  <li>Importing will replace any existing roster for this branch for today.</li>
                 </ul>
               </div>
             </div>
@@ -263,7 +304,7 @@ const Roster = () => {
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="bg-slate-900/60 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
-                        <th className="px-4 py-3">Employee ID</th>
+                        <th className="px-4 py-3">Site/Block</th>
                         <th className="px-4 py-3">Doctor</th>
                         <th className="px-4 py-3">Timing</th>
                         <th className="px-4 py-3 text-right">Status</th>
@@ -272,27 +313,31 @@ const Roster = () => {
                     <tbody className="divide-y divide-slate-850/30">
                       {previewRows.map((row, idx) => (
                         <tr key={idx} className="hover:bg-slate-900/10 transition-colors">
-                          <td className="px-4 py-3 font-mono text-slate-300">{row.employee_id || 'N/A'}</td>
+                          <td className="px-4 py-3 text-slate-300">
+                            <div>
+                              <span className="font-semibold block">{row.site_name || 'N/A'}</span>
+                              <span className="text-[10px] text-slate-500">{row.block_name || 'N/A'}</span>
+                            </div>
+                          </td>
                           <td className="px-4 py-3">
                             <div>
-                              <span className="font-semibold text-white block">{row.doctor_name}</span>
-                              <span className="text-[10px] text-slate-500">{row.department_name}</span>
+                              <span className="font-semibold text-white block">{row.doctor_name || 'Unknown'}</span>
+                              <span className="text-[10px] text-slate-500">{row.department || 'Unknown'}</span>
                             </div>
                           </td>
                           <td className="px-4 py-3 font-medium text-emerald-400">{row.timing}</td>
                           <td className="px-4 py-3 text-right">
-                            {row.status === 'success' ? (
+                            {row.employee_id ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-semibold">
                                 <CheckCircle2 className="w-3.5 h-3.5" />
-                                Match
+                                Valid
                               </span>
                             ) : (
                               <span 
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/25 text-rose-400 font-semibold cursor-help"
-                                title={row.error_message}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/25 text-rose-400 font-semibold"
                               >
                                 <XCircle className="w-3.5 h-3.5" />
-                                Mismatch
+                                Error
                               </span>
                             )}
                           </td>
@@ -317,7 +362,7 @@ const Roster = () => {
                 <button
                   onClick={fetchTodayRoster}
                   disabled={loadingRoster}
-                  className="p-2 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-slate-900 hover:text-slate-200 transition-colors"
+                  className="p-2 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-slate-900 hover:text-slate-200 transition-colors cursor-pointer"
                 >
                   <RefreshCw className={`w-4 h-4 ${loadingRoster ? 'animate-spin' : ''}`} />
                 </button>
@@ -357,6 +402,72 @@ const Roster = () => {
               )}
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Validation Errors Modal */}
+      {showValidationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="glass-panel w-full max-w-lg rounded-2xl border border-rose-500/30 bg-slate-900 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400 border-b border-slate-800 pb-3">
+              <AlertTriangle className="w-6 h-6 flex-shrink-0" />
+              <div>
+                <h3 className="text-lg font-heading font-semibold text-white">Roster Validation Errors</h3>
+                <p className="text-xs text-rose-400/80">Please resolve these errors in your spreadsheet and upload again.</p>
+              </div>
+            </div>
+            <div className="max-h-60 overflow-y-auto space-y-2 pr-1 font-mono text-xs text-rose-300 bg-slate-950/60 p-4 rounded-xl border border-slate-850">
+              {validationErrors.map((err, idx) => (
+                <div key={idx} className="flex gap-2 items-start py-1 border-b border-slate-900 last:border-0">
+                  <span className="text-rose-500 flex-shrink-0">•</span>
+                  <span>{err}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowValidationModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Roster Confirmation Dialog */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="glass-panel w-full max-w-md rounded-2xl border border-emerald-500/30 bg-slate-900 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-emerald-400 border-b border-slate-800 pb-3">
+              <AlertTriangle className="w-6 h-6 flex-shrink-0" />
+              <div>
+                <h3 className="text-lg font-heading font-semibold text-white">Replace Existing Roster?</h3>
+                <p className="text-xs text-emerald-400/80">Duplicate Roster Detected</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              A duty roster already exists for this branch and date. Do you want to Replace the existing roster?
+            </p>
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  clearPreview();
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleImport(true)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-colors cursor-pointer"
+              >
+                Replace
+              </button>
+            </div>
           </div>
         </div>
       )}
