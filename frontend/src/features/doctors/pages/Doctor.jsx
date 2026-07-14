@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../../app/context/AuthContext';
 import api from '../../../common/services/api';
 import { BRANCH_LOCATIONS, BRANCHES } from '../../../common/utils';
 import { Plus, Trash2, Search, Image, Camera, X } from 'lucide-react';
 import { TableSkeleton } from '../../../common/components/Skeleton';
+import Pagination from '../../../common/components/Pagination';
 import Modal from '../../../common/components/Modal';
 import { toast } from 'react-hot-toast';
 
@@ -19,6 +20,13 @@ const Doctor = () => {
   const [filterLocation, setFilterLocation] = useState('');
   const [filterDept, setFilterDept] = useState('');
   
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [pagination, setPagination] = useState(null);
+  const [sortBy, setSortBy] = useState('name');
+  const [sortOrder, setSortOrder] = useState('asc');
+
   // Add Doctor Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -33,9 +41,8 @@ const Doctor = () => {
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  // Debounce timer ref
+  const debounceRef = useRef(null);
 
   // Determine allowed branches & locations for normal admin form dropdown
   const allowedBranches = user.role === 'super_admin' 
@@ -60,26 +67,31 @@ const Doctor = () => {
       .map(l => l.location);
   };
 
-  const fetchDoctors = async () => {
+  const fetchDoctors = useCallback(async (currentSearch) => {
     try {
       setLoading(true);
-      const params = {};
+      const params = {
+        page,
+        limit,
+        sortBy,
+        sortOrder,
+      };
       
-      // Admin filter query parameters
+      if (currentSearch) params.search = currentSearch;
       if (filterBranch) params.branch = filterBranch;
       if (filterLocation) params.location = filterLocation;
       if (filterDept) params.department_id = filterDept;
-      if (search) params.search = search;
       
       const res = await api.get('/doctors', { params });
-      setDoctors(res.data);
+      setDoctors(res.data.data);
+      setPagination(res.data.pagination);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load doctors.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, limit, sortBy, sortOrder, filterBranch, filterLocation, filterDept]);
 
   const fetchDepartments = async () => {
     try {
@@ -90,13 +102,46 @@ const Doctor = () => {
     }
   };
 
+  // Fetch when page, limit, sort, or filters change
   useEffect(() => {
-    fetchDoctors();
-  }, [filterBranch, filterLocation, filterDept, search]);
+    fetchDoctors(search);
+  }, [page, limit, sortBy, sortOrder, filterBranch, filterLocation, filterDept]);
 
   useEffect(() => {
     fetchDepartments();
   }, []);
+
+  // Debounced search
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearch(value);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(() => {
+      setPage(1);
+      fetchDoctors(value);
+    }, 400);
+  };
+
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+  };
+
+  const handleLimitChange = (newLimit) => {
+    setLimit(newLimit);
+    setPage(1);
+  };
+
+  const handleSort = (column) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  };
 
   const handleBranchChange = (e) => {
     const branch = e.target.value;
@@ -172,7 +217,7 @@ const Doctor = () => {
       toast.success('Doctor added successfully!', { id: loadToast });
       setIsModalOpen(false);
       resetForm();
-      fetchDoctors();
+      fetchDoctors(search);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Error adding doctor.', { id: loadToast });
     } finally {
@@ -187,25 +232,25 @@ const Doctor = () => {
     try {
       await api.delete(`/doctors/${id}`);
       toast.success('Doctor profile deleted successfully!', { id: loadToast });
-      setDoctors(doctors.filter((doc) => doc.id !== id));
+      // If we deleted the last item on the current page, go back one page
+      if (doctors.length === 1 && page > 1) {
+        setPage(page - 1);
+      } else {
+        fetchDoctors(search);
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Error deleting doctor.', { id: loadToast });
     }
   };
 
-  // Pagination logic
-  const totalPages = Math.ceil(doctors.length / itemsPerPage);
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentDoctors = doctors.slice(indexOfFirstItem, indexOfLastItem);
-
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
-  };
-
   const getFullPhotoUrl = (url) => {
     if (!url) return '';
     return `http://localhost:5000${url}`;
+  };
+
+  const getSortIcon = (column) => {
+    if (sortBy !== column) return '';
+    return sortOrder === 'asc' ? ' ↑' : ' ↓';
   };
 
   return (
@@ -222,10 +267,7 @@ const Doctor = () => {
             type="text"
             placeholder="Search by name, ID, or title..."
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={handleSearchChange}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm transition-all bg-slate-900/40 border border-slate-800 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-white placeholder-slate-500"
           />
         </div>
@@ -239,7 +281,7 @@ const Doctor = () => {
               onChange={(e) => {
                 setFilterBranch(e.target.value);
                 setFilterLocation('');
-                setCurrentPage(1);
+                setPage(1);
               }}
               className="appearance-none pl-3 pr-8 py-2.5 rounded-xl text-xs bg-slate-900/40 border border-slate-800 text-slate-300 focus:border-emerald-500/60 focus:outline-none font-semibold cursor-pointer"
             >
@@ -257,7 +299,7 @@ const Doctor = () => {
               disabled={!filterBranch}
               onChange={(e) => {
                 setFilterLocation(e.target.value);
-                setCurrentPage(1);
+                setPage(1);
               }}
               className="appearance-none pl-3 pr-8 py-2.5 rounded-xl text-xs bg-slate-900/40 border border-slate-800 text-slate-300 focus:border-emerald-500/60 focus:outline-none font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
@@ -274,7 +316,7 @@ const Doctor = () => {
               value={filterDept}
               onChange={(e) => {
                 setFilterDept(e.target.value);
-                setCurrentPage(1);
+                setPage(1);
               }}
               className="appearance-none pl-3 pr-8 py-2.5 rounded-xl text-xs bg-slate-900/40 border border-slate-800 text-slate-300 focus:border-emerald-500/60 focus:outline-none font-semibold cursor-pointer"
             >
@@ -307,17 +349,42 @@ const Doctor = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-900/40 border-b border-slate-850 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                  <th className="px-6 py-4">Clinician</th>
-                  <th className="px-6 py-4">Employee ID</th>
-                  <th className="px-6 py-4">Title / Designation</th>
-                  <th className="px-6 py-4">Department</th>
-                  <th className="px-6 py-4">Area / Location</th>
+                  <th
+                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
+                    onClick={() => handleSort('name')}
+                  >
+                    Clinician{getSortIcon('name')}
+                  </th>
+                  <th
+                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
+                    onClick={() => handleSort('employee_id')}
+                  >
+                    Employee ID{getSortIcon('employee_id')}
+                  </th>
+                  <th
+                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
+                    onClick={() => handleSort('designation')}
+                  >
+                    Title / Designation{getSortIcon('designation')}
+                  </th>
+                  <th
+                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
+                    onClick={() => handleSort('department_name')}
+                  >
+                    Department{getSortIcon('department_name')}
+                  </th>
+                  <th
+                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
+                    onClick={() => handleSort('branch')}
+                  >
+                    Area / Location{getSortIcon('branch')}
+                  </th>
                   {hasPermission('Doctor', 'delete') && <th className="px-6 py-4 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-850/30 text-sm">
-                {currentDoctors.length > 0 ? (
-                  currentDoctors.map((doc) => (
+                {doctors.length > 0 ? (
+                  doctors.map((doc) => (
                     <tr key={doc.id} className="hover:bg-slate-900/20 transition-colors">
                       {/* Photo & Name */}
                       <td className="px-6 py-4">
@@ -368,7 +435,9 @@ const Doctor = () => {
                 ) : (
                   <tr>
                     <td colSpan={hasPermission('Doctor', 'delete') ? 6 : 5} className="px-6 py-16 text-center text-slate-500 font-medium">
-                      No doctors matching search criteria found.
+                      {search || filterBranch || filterDept
+                        ? 'No doctors match your search criteria.'
+                        : 'No doctors found. Add a doctor to get started.'}
                     </td>
                   </tr>
                 )}
@@ -376,43 +445,13 @@ const Doctor = () => {
             </table>
           </div>
 
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="px-6 py-4 border-t border-slate-850 flex items-center justify-between">
-              <div className="text-xs text-slate-500 font-semibold">
-                Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, doctors.length)} of {doctors.length} doctors
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-900 text-xs font-semibold transition-colors"
-                >
-                  Prev
-                </button>
-                {Array.from({ length: totalPages }).map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handlePageChange(idx + 1)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                      currentPage === idx + 1
-                        ? 'bg-emerald-400 border-emerald-400 text-slate-950 shadow-md shadow-emerald-400/5'
-                        : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:bg-slate-900'
-                    }`}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
-                <button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-900 text-xs font-semibold transition-colors"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Pagination */}
+          <Pagination
+            pagination={pagination}
+            onPageChange={handlePageChange}
+            onLimitChange={handleLimitChange}
+            loading={loading}
+          />
         </div>
       )}
 

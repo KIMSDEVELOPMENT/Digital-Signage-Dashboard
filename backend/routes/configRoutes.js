@@ -1,5 +1,5 @@
 import express from 'express';
-import { getPool } from '../migrations/db.js';
+import { getPool } from '../config/db.js';
 
 const router = express.Router();
 

@@ -6,7 +6,7 @@ import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { initializeDatabase } from './migrations/db.js';
+import { initializePool } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
@@ -55,9 +55,15 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize database then start server
-initializeDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-  });
-});
+// Initialize pool → start server
+(async () => {
+  try {
+    await initializePool();
+    app.listen(PORT, () => {
+      console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('❌ Server failed to start:', error.message);
+    process.exit(1);
+  }
+})();

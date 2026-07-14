@@ -1,4 +1,4 @@
-import { getPool } from '../migrations/db.js';
+import { getPool } from '../config/db.js';
 import { User } from '../models/User.js';
 
 /**

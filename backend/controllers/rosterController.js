@@ -4,7 +4,7 @@ import doctorRepository from '../repositories/DoctorRepository.js';
 import rosterRepository from '../repositories/RosterRepository.js';
 import userRepository from '../repositories/UserRepository.js';
 import departmentRepository from '../repositories/DepartmentRepository.js';
-import { getPool } from '../migrations/db.js';
+import { getPool } from '../config/db.js';
 
 // Resolve url parameters case-insensitively and ignoring non-alphanumeric chars
 async function resolveLocation(branch, locParam) {

@@ -12,32 +12,80 @@ const VALID_BRANCH_LOCATIONS = {
 
 export async function getDoctors(req, res) {
   try {
-    const { search, branch, location, department_id } = req.query;
+    const { search, branch, location, department_id, page, limit, sortBy, sortOrder } = req.query;
 
-    if (req.user.role === 'normal_admin') {
-      const branches = await userRepository.getUserBranches(req.user.id);
-      const locations = await userRepository.getUserLocations(req.user.id);
-      const departmentIds = await userRepository.getUserDepartmentIds(req.user.id);
+    // If no pagination params provided, return full list (backwards compatible)
+    if (!page) {
+      if (req.user.role === 'normal_admin') {
+        const branches = await userRepository.getUserBranches(req.user.id);
+        const locations = await userRepository.getUserLocations(req.user.id);
+        const departmentIds = await userRepository.getUserDepartmentIds(req.user.id);
 
+        const doctors = await doctorRepository.findWithFilters({
+          branches,
+          locations,
+          departmentIds,
+          search: search || null,
+        });
+
+        return res.status(200).json(doctors.map((d) => d.toPublic()));
+      }
+
+      // Super admin — full filter support
       const doctors = await doctorRepository.findWithFilters({
-        branches,
-        locations,
-        departmentIds,
+        branches: branch ? [branch] : null,
+        locations: location && branch ? [{ branch, location }] : null,
+        departmentIds: department_id ? [department_id] : null,
         search: search || null,
       });
 
       return res.status(200).json(doctors.map((d) => d.toPublic()));
     }
 
-    // Super admin — full filter support
-    const doctors = await doctorRepository.findWithFilters({
-      branches: branch ? [branch] : null,
-      locations: location && branch ? [{ branch, location }] : null,
-      departmentIds: department_id ? [department_id] : null,
-      search: search || null,
-    });
+    // Paginated response
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
 
-    return res.status(200).json(doctors.map((d) => d.toPublic()));
+    let paginationParams = {
+      page: pageNum,
+      limit: limitNum,
+      search: search || '',
+      sortBy: sortBy || 'name',
+      sortOrder: sortOrder || 'asc',
+    };
+
+    if (req.user.role === 'normal_admin') {
+      // Normal admin: filter by assigned branches/locations/departments
+      const userBranches = await userRepository.getUserBranches(req.user.id);
+      const userLocations = await userRepository.getUserLocations(req.user.id);
+      const userDepartmentIds = await userRepository.getUserDepartmentIds(req.user.id);
+
+      paginationParams.branches = userBranches;
+      paginationParams.locations = userLocations;
+      paginationParams.departmentIds = userDepartmentIds;
+    }
+
+    // Apply user-selected filters from query params
+    if (branch) paginationParams.branch = branch;
+    if (location) paginationParams.location = location;
+    if (department_id) paginationParams.departmentId = department_id;
+
+    const { data, totalRecords } = await doctorRepository.findPaginated(paginationParams);
+
+    const totalPages = Math.ceil(totalRecords / limitNum);
+
+    return res.status(200).json({
+      success: true,
+      data: data.map((d) => d.toPublic()),
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        totalRecords,
+        totalPages,
+        hasNextPage: pageNum < totalPages,
+        hasPreviousPage: pageNum > 1,
+      },
+    });
   } catch (error) {
     console.error('Get doctors error:', error);
     return res.status(500).json({ message: 'Internal server error.' });
