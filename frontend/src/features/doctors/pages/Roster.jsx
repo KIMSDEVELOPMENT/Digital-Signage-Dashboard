@@ -9,7 +9,10 @@ import {
   FileSpreadsheet, 
   CalendarDays, 
   RefreshCw, 
-  MapPin 
+  MapPin,
+  Trash2,
+  Plus,
+  Search
 } from 'lucide-react';
 import { TableSkeleton } from '../../../common/components/Skeleton';
 import { toast } from 'react-hot-toast';
@@ -24,11 +27,17 @@ const Roster = () => {
 
   // Selection state
   const [selectedBranch, setSelectedBranch] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   
   // States
   const [file, setFile] = useState(null);
   const [previewRows, setPreviewRows] = useState([]);
   const [todayRoster, setTodayRoster] = useState([]);
+  const [manualSearch, setManualSearch] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [manualTiming, setManualTiming] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -47,30 +56,90 @@ const Roster = () => {
     }
   }, [allowedBranches, user]);
 
-  const fetchTodayRoster = async () => {
-    if (!selectedBranch) return;
+  const fetchRoster = async () => {
+    if (!selectedBranch || !selectedDate) return;
     
     try {
       setLoadingRoster(true);
-      const res = await api.get(`/roster/today`, {
-        params: { branch: selectedBranch }
+      const res = await api.get(`/roster/date`, {
+        params: { branch: selectedBranch, date: selectedDate }
       });
       setTodayRoster(res.data);
     } catch (err) {
       console.error(err);
+      setTodayRoster([]);
     } finally {
       setLoadingRoster(false);
     }
   };
 
   useEffect(() => {
-    fetchTodayRoster();
-  }, [selectedBranch]);
+    fetchRoster();
+  }, [selectedBranch, selectedDate]);
+
+  useEffect(() => {
+    if (!manualSearch || !selectedBranch) {
+      setSearchResults([]);
+      return;
+    }
+    const search = async () => {
+      setIsSearching(true);
+      try {
+        const res = await api.get('/doctors', { params: { search: manualSearch, branches: selectedBranch, status: 1 } });
+        setSearchResults(res.data.data || res.data); // Adjust based on pagination if any
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+    const timeoutId = setTimeout(search, 300);
+    return () => clearTimeout(timeoutId);
+  }, [manualSearch, selectedBranch]);
+
+  const handleAddManualEntry = async (e) => {
+    e.preventDefault();
+    if (!selectedDoctor || !manualTiming) return;
+    
+    const loadToast = toast.loading('Adding manual entry...');
+    try {
+      await api.post('/roster/manual', {
+        date: selectedDate,
+        doctor_id: selectedDoctor.id,
+        timing: manualTiming
+      });
+      toast.success('Manual entry added successfully!', { id: loadToast });
+      setManualSearch('');
+      setSelectedDoctor(null);
+      setManualTiming('');
+      setSearchResults([]);
+      fetchRoster();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || 'Failed to add manual entry.', { id: loadToast });
+    }
+  };
+
+  const handleDeleteManualEntry = async (id) => {
+    if (!window.confirm('Are you sure you want to remove this doctor from the roster?')) return;
+    
+    const loadToast = toast.loading('Removing entry...');
+    try {
+      await api.delete(`/roster/manual/${id}`);
+      toast.success('Entry removed successfully.', { id: loadToast });
+      fetchRoster();
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to remove entry.', { id: loadToast });
+    }
+  };
 
   const handleBranchChange = (e) => {
     const branch = e.target.value;
     setSelectedBranch(branch);
     setPreviewRows([]);
+    setManualSearch('');
+    setSelectedDoctor(null);
   };
 
   const downloadRosterTemplate = async () => {
@@ -103,32 +172,42 @@ const Roster = () => {
         toast.error('Only Excel files (.xlsx, .xls) are allowed.');
         return;
       }
-      setFile(selectedFile);
-      handlePreview(selectedFile);
+      handleAutoImport(selectedFile);
     }
   };
 
-  const handlePreview = async (uploadFile) => {
+  const handleAutoImport = async (uploadFile) => {
     if (!selectedBranch) {
       toast.error('Please select a branch first.');
-      setFile(null);
       return;
     }
 
     setLoadingPreview(true);
-    const loadToast = toast.loading('Reading and matching Excel records...');
+    const loadToast = toast.loading('Uploading and importing roster...');
     
     const formData = new FormData();
     formData.append('file', uploadFile);
 
     try {
+      // 1. Preview/Validate
       const res = await api.post(`/roster/preview?branch=${selectedBranch}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      const { duplicateExists, previewData } = res.data;
-      setPreviewRows(previewData);
-      setDuplicateExists(duplicateExists);
-      toast.success('Excel records parsed successfully!', { id: loadToast });
+      const { previewData } = res.data;
+      
+      // 2. Map payload
+      const rosterData = previewData.map(row => ({
+        date: row.date,
+        doctor_id: row.doctor_id,
+        employee_id: row.employee_id,
+        timing: row.timing
+      }));
+
+      // 3. Import (auto replace)
+      await api.post('/roster/import', { roster: rosterData, replace: true });
+      
+      toast.success("Roster imported successfully!", { id: loadToast });
+      fetchRoster();
     } catch (err) {
       console.error(err);
       const responseData = err.response?.data;
@@ -137,49 +216,16 @@ const Roster = () => {
         setShowValidationModal(true);
         toast.error('Validation errors found in Excel file.', { id: loadToast });
       } else {
-        const msg = responseData?.message || 'Error parsing Excel sheet.';
+        const msg = responseData?.message || 'Error processing Excel sheet.';
         toast.error(msg, { id: loadToast });
       }
-      setFile(null);
-      setPreviewRows([]);
     } finally {
       setLoadingPreview(false);
+      // Reset input value so same file can be uploaded again if needed
+      const fileInput = document.getElementById('roster-upload-input');
+      if (fileInput) fileInput.value = '';
     }
   };
-
-  const handleImport = async (replace = false) => {
-    if (previewRows.length === 0) return;
-
-    setImporting(true);
-    const loadToast = toast.loading("Saving today's roster...");
-
-    const rosterData = previewRows.map(row => ({
-      doctor_id: row.doctor_id,
-      employee_id: row.employee_id,
-      timing: row.timing
-    }));
-
-    try {
-      await api.post('/roster/import', { roster: rosterData, replace });
-      toast.success("Today's roster imported successfully!", { id: loadToast });
-      setPreviewRows([]);
-      setFile(null);
-      setShowConfirmModal(false);
-      fetchTodayRoster();
-    } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.message || 'Failed to import roster.', { id: loadToast });
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const clearPreview = () => {
-    setFile(null);
-    setPreviewRows([]);
-  };
-
-  const hasValidationErrors = previewRows.some(row => row.status === 'error');
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -192,7 +238,7 @@ const Roster = () => {
 
         <div className="flex flex-col sm:flex-row items-end gap-4 max-w-xl">
           {/* Branch select */}
-          <div className="space-y-1.5 flex-1 w-full">
+          <div className="space-y-1.5 flex-1 w-full max-w-[200px]">
             <label className="text-xs font-semibold text-slate-300 block">BRANCH</label>
             <select
               value={selectedBranch}
@@ -204,6 +250,15 @@ const Roster = () => {
                 <option key={b} value={b}>{b}</option>
               ))}
             </select>
+          </div>
+          <div className="space-y-1.5 flex-1 w-full max-w-[200px]">
+            <label className="text-xs font-semibold text-slate-300 block">DATE</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 cursor-pointer"
+            />
           </div>
           {selectedBranch && (
             <button
@@ -228,44 +283,21 @@ const Roster = () => {
               </div>
 
               {hasPermission('Duty Roster', 'create') ? (
-                !file ? (
                   <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-800 hover:border-emerald-500/50 rounded-2xl bg-slate-950/40 cursor-pointer group transition-all duration-200">
                     <UploadCloud className="w-10 h-10 text-slate-500 group-hover:text-emerald-400 transition-colors mb-3" />
-                    <p className="text-sm font-semibold text-slate-300 text-center">Drag & drop excel sheet or browse</p>
+                    <p className="text-sm font-semibold text-slate-300 text-center">
+                      {loadingPreview ? 'Uploading & Processing...' : 'Drag & drop excel sheet or browse'}
+                    </p>
                     <p className="text-[10px] text-slate-500 text-center mt-1">Accepts .xlsx and .xls formats</p>
                     <input
+                      id="roster-upload-input"
                       type="file"
                       accept=".xlsx, .xls"
                       onChange={handleFileChange}
+                      disabled={loadingPreview}
                       className="hidden"
                     />
                   </label>
-                ) : (
-                  <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/40 flex flex-col space-y-4">
-                    <div className="flex items-start gap-3">
-                      <FileSpreadsheet className="w-8 h-8 text-emerald-400 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-white truncate">{file.name}</p>
-                        <p className="text-[10px] text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={clearPreview}
-                        className="flex-1 py-2 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors font-semibold text-xs cursor-pointer"
-                      >
-                        Clear
-                      </button>
-                      <button
-                        onClick={() => duplicateExists ? setShowConfirmModal(true) : handleImport(false)}
-                        disabled={importing || hasValidationErrors || previewRows.length === 0}
-                        className="flex-1 py-2 rounded-lg font-semibold text-xs text-slate-950 bg-emerald-400 hover:bg-emerald-300 disabled:bg-emerald-500/20 disabled:text-slate-500 disabled:cursor-not-allowed transition-all shadow-md shadow-emerald-400/5 cursor-pointer"
-                      >
-                        Import Today's Roster
-                      </button>
-                    </div>
-                  </div>
-                )
               ) : (
                 <div className="p-4 text-center border border-slate-800/40 bg-slate-950/20 rounded-xl text-slate-500 text-xs">
                   You do not have permissions to import roster schedules.
@@ -288,80 +320,19 @@ const Roster = () => {
           {/* Right panel: Preview or Today's Roster */}
           <div className="xl:col-span-2 space-y-6">
             
-            {/* 1. Preview Table */}
-            {previewRows.length > 0 && (
-              <div className="glass-panel p-6 rounded-2xl border border-slate-850 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800/30 pb-3">
-                  <h3 className="font-heading font-semibold text-white">Roster Excel Preview</h3>
-                  {hasValidationErrors && (
-                    <div className="flex items-center gap-1 text-rose-400 text-xs font-semibold">
-                      <AlertTriangle className="w-4.5 h-4.5" />
-                      Resolve matching errors
-                    </div>
-                  )}
-                </div>
+            {/* 1. Today's Roster Header */}
 
-                <div className="overflow-x-auto rounded-xl border border-slate-800/60 max-h-96">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-900/60 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
-                        <th className="px-4 py-3">Site/Block</th>
-                        <th className="px-4 py-3">Doctor</th>
-                        <th className="px-4 py-3">Timing</th>
-                        <th className="px-4 py-3 text-right">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-850/30">
-                      {previewRows.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-slate-900/10 transition-colors">
-                          <td className="px-4 py-3 text-slate-300">
-                            <div>
-                              <span className="font-semibold block">{row.site_name || 'N/A'}</span>
-                              <span className="text-[10px] text-slate-500">{row.block_name || 'N/A'}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div>
-                              <span className="font-semibold text-white block">{row.doctor_name || 'Unknown'}</span>
-                              <span className="text-[10px] text-slate-500">{row.department || 'Unknown'}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 font-medium text-emerald-400">{row.timing}</td>
-                          <td className="px-4 py-3 text-right">
-                            {row.employee_id ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-semibold">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                Valid
-                              </span>
-                            ) : (
-                              <span 
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/25 text-rose-400 font-semibold"
-                              >
-                                <XCircle className="w-3.5 h-3.5" />
-                                Error
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* 2. Today's active roster list */}
             <div className="glass-panel p-6 rounded-2xl border border-slate-850 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800/30 pb-3">
                 <div className="flex items-center gap-2">
                   <CalendarDays className="w-5 h-5 text-emerald-400" />
                   <div>
-                    <h3 className="font-heading font-semibold text-white">Today's Scheduled Clinicians</h3>
-                    <p className="text-[10px] text-slate-500 font-medium">Currently active schedule in this area</p>
+                    <h3 className="font-heading font-semibold text-white">Scheduled Clinicians</h3>
+                    <p className="text-[10px] text-slate-500 font-medium">Currently active schedule for {selectedDate}</p>
                   </div>
                 </div>
                 <button
-                  onClick={fetchTodayRoster}
+                  onClick={fetchRoster}
                   disabled={loadingRoster}
                   className="p-2 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-slate-900 hover:text-slate-200 transition-colors cursor-pointer"
                 >
@@ -369,8 +340,66 @@ const Roster = () => {
                 </button>
               </div>
 
+              {/* Manual Entry Form */}
+              {hasPermission('Duty Roster', 'update') && (
+                <form onSubmit={handleAddManualEntry} className="flex flex-col sm:flex-row items-end gap-3 bg-slate-900/40 p-4 rounded-xl border border-slate-800">
+                  <div className="flex-1 w-full space-y-1.5 relative">
+                    <label className="text-xs font-semibold text-slate-300">Doctor Search</label>
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={selectedDoctor ? selectedDoctor.name : manualSearch}
+                        onChange={(e) => {
+                          setSelectedDoctor(null);
+                          setManualSearch(e.target.value);
+                        }}
+                        placeholder="Search doctor name..."
+                        className="w-full pl-9 pr-4 py-2 rounded-lg text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300"
+                      />
+                    </div>
+                    {/* Search Dropdown */}
+                    {!selectedDoctor && searchResults.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 max-h-48 overflow-y-auto bg-slate-900 border border-slate-800 rounded-lg shadow-xl">
+                        {searchResults.map(doc => (
+                          <div 
+                            key={doc.id}
+                            onClick={() => {
+                              setSelectedDoctor(doc);
+                              setManualSearch('');
+                              setSearchResults([]);
+                            }}
+                            className="px-4 py-2 hover:bg-slate-800 cursor-pointer border-b border-slate-800/50 last:border-0"
+                          >
+                            <p className="text-sm font-semibold text-white">{doc.name}</p>
+                            <p className="text-[10px] text-slate-400">{doc.department?.name || 'No Dept'} | {doc.employee_id}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="w-full sm:w-48 space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-300">Shift Timing</label>
+                    <input
+                      type="text"
+                      value={manualTiming}
+                      onChange={(e) => setManualTiming(e.target.value)}
+                      placeholder="e.g. 09:00 AM - 05:00 PM"
+                      className="w-full px-4 py-2 rounded-lg text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!selectedDoctor || !manualTiming}
+                    className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 disabled:bg-emerald-500/20 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Add Entry
+                  </button>
+                </form>
+              )}
+
               {loadingRoster ? (
-                <TableSkeleton rows={4} cols={4} />
+                <TableSkeleton rows={4} cols={5} />
               ) : todayRoster.length > 0 ? (
                 <div className="overflow-x-auto rounded-xl border border-slate-800/60">
                   <table className="w-full text-left border-collapse text-xs">
@@ -380,6 +409,7 @@ const Roster = () => {
                         <th className="px-4 py-3">Employee ID</th>
                         <th className="px-4 py-3">Department</th>
                         <th className="px-4 py-3">Shift Timing</th>
+                        {hasPermission('Duty Roster', 'delete') && <th className="px-4 py-3 text-right">Actions</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-850/30">
@@ -389,6 +419,17 @@ const Roster = () => {
                           <td className="px-4 py-3 font-mono text-slate-400">{item.employee_id}</td>
                           <td className="px-4 py-3 text-slate-300">{item.department_name}</td>
                           <td className="px-4 py-3 font-medium text-emerald-400">{item.timing}</td>
+                          {hasPermission('Duty Roster', 'delete') && (
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() => handleDeleteManualEntry(item.roster_id)}
+                                className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"
+                                title="Remove Entry"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -397,8 +438,8 @@ const Roster = () => {
               ) : (
                 <div className="p-8 text-center border border-slate-800/40 bg-slate-950/20 rounded-xl">
                   <CalendarDays className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-slate-400">No duty roster uploaded for today yet.</p>
-                  <p className="text-xs text-slate-500 mt-1">Upload an Excel schedule sheet above to populate today's clinic board.</p>
+                  <p className="text-sm font-semibold text-slate-400">No duty roster active for {selectedDate}.</p>
+                  <p className="text-xs text-slate-500 mt-1">Upload an Excel schedule sheet above or manually add entries to populate the clinic board.</p>
                 </div>
               )}
             </div>
@@ -438,40 +479,7 @@ const Roster = () => {
         </div>
       )}
 
-      {/* Duplicate Roster Confirmation Dialog */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="glass-panel w-full max-w-md rounded-2xl border border-emerald-500/30 bg-slate-900 p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3 text-emerald-400 border-b border-slate-800 pb-3">
-              <AlertTriangle className="w-6 h-6 flex-shrink-0" />
-              <div>
-                <h3 className="text-lg font-heading font-semibold text-white">Replace Existing Roster?</h3>
-                <p className="text-xs text-emerald-400/80">Duplicate Roster Detected</p>
-              </div>
-            </div>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              A duty roster already exists for this branch and date. Do you want to Replace the existing roster?
-            </p>
-            <div className="flex gap-3 justify-end pt-2">
-              <button
-                onClick={() => {
-                  setShowConfirmModal(false);
-                  clearPreview();
-                }}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleImport(true)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-colors cursor-pointer"
-              >
-                Replace
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Duplicate Roster Confirmation Dialog (Removed) */}
     </div>
   );
 };

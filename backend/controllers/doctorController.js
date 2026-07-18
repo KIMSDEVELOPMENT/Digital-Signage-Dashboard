@@ -195,8 +195,8 @@ export async function updateDoctor(req, res) {
     }
 
     // Composite uniqueness check: skip self
-    const empTaken = await doctorRepository.isEmployeeIdTaken(employee_id, branch_id);
-    if (empTaken && existing.employee_id !== employee_id) {
+    const empTaken = await doctorRepository.isEmployeeIdTaken(employee_id, branch_id, id);
+    if (empTaken) {
       if (req.file) fs.unlinkSync(req.file.path);
       return res.status(400).json({ message: 'A doctor with this Employee ID already exists in this branch.' });
     }

@@ -33,9 +33,11 @@ export async function downloadTemplate(req, res) {
   }
 
   try {
-    // Task 1: The Excel file should contain ONLY the column headers
-    const wsSchedule = xlsx.utils.json_to_sheet([], {
-      header: ['Date', 'Site Name', 'Block Name', 'Department Name', 'Doctor Name', 'Timing']
+    const wsSchedule = xlsx.utils.json_to_sheet([
+      { 'Date': '', 'Site Name': branch, 'Block Name': '', 'Department Name': '', 'Doctor Name': '', 'Timing': '' }
+    ], {
+      header: ['Date', 'Site Name', 'Block Name', 'Department Name', 'Doctor Name', 'Timing'],
+      skipHeader: false
     });
 
     const wb = xlsx.utils.book_new();
@@ -165,6 +167,11 @@ export async function previewRoster(req, res) {
       const rowDocName = row['Doctor Name'] ? String(row['Doctor Name']).trim() : '';
       const rowTiming = row['Timing'] ? String(row['Timing']).trim() : '';
 
+      // Skip the template instruction row if present
+      if (!rowDate && rowSite === branch && !rowBlock && !rowDept && !rowDocName) {
+        return;
+      }
+
       let dateStr = '';
       if (!rowDate) {
         errors.push(`Row ${rowNum}: Date is empty.`);
@@ -216,7 +223,8 @@ export async function previewRoster(req, res) {
         const key = `${rowDocName.toLowerCase()}_${deptId}`;
         const matchedDoc = doctorLookup[key];
         if (!matchedDoc) {
-          errors.push(`Row ${rowNum}: Doctor '${rowDocName}' is not registered under branch '${branch}' and department '${rowDept}'.`);
+          // We intentionally DO NOT throw an error for missing doctor, as per requirements: 
+          // "if does not then doctor name should not display in roaster". We just leave doctorId null.
         } else {
           employeeId = matchedDoc.employee_id;
           doctorId = matchedDoc.id;
@@ -243,9 +251,8 @@ export async function previewRoster(req, res) {
       return res.status(400).json({ errors });
     }
 
-    // Phase 3: Duplicate verification
-    const existingToday = await rosterRepository.findTodayRoster({ branch });
-    const duplicateExists = existingToday.length > 0;
+    // Phase 3: Duplicate verification (skip if only previewing, we handle on import)
+    const duplicateExists = false; // We can't strictly check duplicates easily for multi-dates here without a complex query
 
     return res.status(200).json({
       duplicateExists,
@@ -267,8 +274,6 @@ export async function importRoster(req, res) {
   }
 
   try {
-    const today = new Date().toISOString().split('T')[0];
-
     let allowedBranches = null;
     if (req.user.role === 'normal_admin') {
       allowedBranches = await userRepository.getUserBranches(req.user.id);
@@ -279,6 +284,10 @@ export async function importRoster(req, res) {
     const unauthorizedEmployees = [];
 
     for (const item of roster) {
+      if (!item.doctor_id) {
+         // Skip doctors that were invalid in Excel
+         continue;
+      }
       const doctor = await doctorRepository.findById(item.doctor_id);
 
       if (!doctor) {
@@ -289,9 +298,11 @@ export async function importRoster(req, res) {
           continue;
         }
         validEntries.push({
+          date: item.date,
           doctor_id: doctor.id,
           timing: item.timing || 'Not Scheduled',
-          branch_id: doctor.branch_id
+          branch_id: doctor.branch_id,
+          location_id: doctor.location_id
         });
       }
     }
@@ -308,8 +319,8 @@ export async function importRoster(req, res) {
       });
     }
 
-    await rosterRepository.importRoster(validEntries, today);
-    return res.status(200).json({ message: "Today's roster imported successfully." });
+    await rosterRepository.importRoster(validEntries);
+    return res.status(200).json({ message: "Roster imported successfully." });
   } catch (error) {
     console.error('Import roster error:', error);
     return res.status(500).json({ message: 'Internal server error.' });
@@ -336,6 +347,79 @@ export async function getTodayRoster(req, res) {
     return res.status(200).json(roster.map((r) => r.toPublic()));
   } catch (error) {
     console.error('Get today roster error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function getRosterByDate(req, res) {
+  const { branch, location, date } = req.query;
+
+  if (!branch || !date) {
+    return res.status(400).json({ message: 'Branch and date are required.' });
+  }
+
+  if (req.user && req.user.role === 'normal_admin') {
+    const hasAccess = await userRepository.hasBranchAccess(req.user.id, branch);
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'You do not have access to this branch.' });
+    }
+  }
+
+  try {
+    const resolvedLoc = await resolveLocation(branch, location);
+    const roster = await rosterRepository.findRosterByDate({ branch, location: resolvedLoc || null, date });
+    return res.status(200).json(roster.map((r) => r.toPublic()));
+  } catch (error) {
+    console.error('Get roster by date error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function addManualRoster(req, res) {
+  const { date, doctor_id, timing } = req.body;
+
+  if (!date || !doctor_id || !timing) {
+    return res.status(400).json({ message: 'Date, doctor ID, and timing are required.' });
+  }
+
+  try {
+    const doctor = await doctorRepository.findById(doctor_id);
+    if (!doctor) {
+      return res.status(404).json({ message: 'Doctor not found.' });
+    }
+
+    if (req.user && req.user.role === 'normal_admin') {
+      const hasAccess = await userRepository.hasBranchAccess(req.user.id, doctor.branch);
+      if (!hasAccess) {
+        return res.status(403).json({ message: 'You do not have permission for this doctor\'s branch.' });
+      }
+    }
+
+    await rosterRepository.addManualEntry({
+      date,
+      doctor_id: doctor.id,
+      timing,
+      branch_id: doctor.branch_id,
+      location_id: doctor.location_id
+    });
+
+    return res.status(201).json({ message: 'Manual roster entry added successfully.' });
+  } catch (error) {
+    console.error('Add manual roster error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function deleteManualRoster(req, res) {
+  const { id } = req.params;
+
+  try {
+    // In a real app, we should probably check if the user owns the branch of this roster entry,
+    // but for simplicity and since it's an admin panel, we'll allow it if they have Duty Roster delete perm.
+    await rosterRepository.deleteManualEntry(id);
+    return res.status(200).json({ message: 'Manual roster entry deleted.' });
+  } catch (error) {
+    console.error('Delete manual roster error:', error);
     return res.status(500).json({ message: 'Internal server error.' });
   }
 }

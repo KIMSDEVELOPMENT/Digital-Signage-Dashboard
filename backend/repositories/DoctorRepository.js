@@ -234,12 +234,15 @@ export class DoctorRepository {
     return rows.length > 0 ? new Doctor(rows[0]) : null;
   }
 
-  async isEmployeeIdTaken(employeeId, branchId) {
+  async isEmployeeIdTaken(employeeId, branchId, excludeId = null) {
     const pool = getPool();
-    const [rows] = await pool.query(
-      'SELECT id FROM doctors WHERE employee_id = ? AND branch_id = ?',
-      [employeeId, branchId]
-    );
+    let query = 'SELECT id FROM doctors WHERE employee_id = ? AND branch_id = ?';
+    const params = [employeeId, branchId];
+    if (excludeId) {
+      query += ' AND id != ?';
+      params.push(excludeId);
+    }
+    const [rows] = await pool.query(query, params);
     return rows.length > 0;
   }
 

@@ -15,6 +15,7 @@ import doctorRoutes from './routes/doctorRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import rosterRoutes from './routes/rosterRoutes.js';
 import configRoutes from './routes/configRoutes.js';
+import displayRoutes from './routes/displayRoutes.js';
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ app.use('/api/doctors', doctorRoutes);
 app.use('/api/admins', adminRoutes);
 app.use('/api/roster', rosterRoutes);
 app.use('/api/config', configRoutes);
+app.use('/api/display', displayRoutes);
 
 // Root route
 app.get('/', (req, res) => {

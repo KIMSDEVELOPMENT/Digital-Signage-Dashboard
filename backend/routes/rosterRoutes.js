@@ -13,4 +13,18 @@ router.post('/import', authenticateToken, checkModulePermission('Duty Roster', '
 // Today's roster - public for display screen (no auth needed)
 router.get('/today', getTodayRoster);
 
+// Manual UI routes
+router.get('/date', authenticateToken, checkModulePermission('Duty Roster', 'read'), (req, res) => {
+  // Can just reuse the controller but pass date from query
+  import('../controllers/rosterController.js').then(c => c.getRosterByDate(req, res));
+});
+
+router.post('/manual', authenticateToken, checkModulePermission('Duty Roster', 'update'), (req, res) => {
+  import('../controllers/rosterController.js').then(c => c.addManualRoster(req, res));
+});
+
+router.delete('/manual/:id', authenticateToken, checkModulePermission('Duty Roster', 'delete'), (req, res) => {
+  import('../controllers/rosterController.js').then(c => c.deleteManualRoster(req, res));
+});
+
 export default router;
