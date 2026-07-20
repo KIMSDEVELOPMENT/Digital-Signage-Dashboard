@@ -1,14 +1,21 @@
 import express from 'express';
-import { getLocations, getLocationById, createLocation, updateLocation, deleteLocation } from '../controllers/locationController.js';
-import { authenticateToken } from '../middleware/auth.js';
-import { checkModulePermission } from '../middleware/permission.js';
+import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
+import { 
+  getLocations, 
+  createLocation, 
+  updateLocation, 
+  deleteLocation 
+} from '../controllers/locationController.js';
 
 const router = express.Router();
 
-router.get('/', authenticateToken, getLocations);
-router.get('/:id', authenticateToken, getLocationById);
-router.post('/', authenticateToken, checkModulePermission('Branch', 'create'), createLocation); // Linked to Branch permission
-router.put('/:id', authenticateToken, checkModulePermission('Branch', 'update'), updateLocation);
-router.delete('/:id', authenticateToken, checkModulePermission('Branch', 'delete'), deleteLocation);
+// Only super admin can manage locations
+router.use(authenticateToken);
+router.use(authorizeRoles('super_admin'));
+
+router.get('/', getLocations);
+router.post('/', createLocation);
+router.put('/:id', updateLocation);
+router.delete('/:id', deleteLocation);
 
 export default router;

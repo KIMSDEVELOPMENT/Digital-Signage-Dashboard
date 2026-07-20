@@ -42,10 +42,10 @@ const Department = () => {
   const fetchMasters = useCallback(async () => {
     try {
       const branchesRes = await api.get('/branches?status=1');
-      setBranches(branchesRes.data);
+      setBranches(branchesRes.data.data || branchesRes.data);
 
-      const locationsRes = await api.get('/locations?status=1');
-      setLocations(locationsRes.data);
+      const locationsRes = await api.get('/locations?status=1', { params: { limit: 1000 } });
+      setLocations(locationsRes.data.data || locationsRes.data);
     } catch (err) {
       console.error('Error fetching masters:', err);
       toast.error('Failed to load branch/location configurations.');

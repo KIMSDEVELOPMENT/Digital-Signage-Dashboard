@@ -9,6 +9,7 @@ const Dashboard = lazy(() => import('../../features/dashboard/pages/Dashboard'))
 const Department = lazy(() => import('../../features/departments/pages/Department'));
 const Doctor = lazy(() => import('../../features/doctors/pages/Doctor'));
 const Branch = lazy(() => import('../../features/branches/pages/Branch'));
+const Location = lazy(() => import('../../features/locations/pages/Location'));
 const Admins = lazy(() => import('../../features/settings/pages/Admins'));
 const AdminConfig = lazy(() => import('../../features/settings/pages/AdminConfig'));
 const Roster = lazy(() => import('../../features/doctors/pages/Roster'));
@@ -54,6 +55,7 @@ const AppRoutes = () => {
             {/* Super Admin Only Routes */}
             <Route element={<SuperAdminRoute />}>
               <Route path="/branches" element={<Branch />} />
+              <Route path="/locations" element={<Location />} />
               <Route path="/admins" element={<Admins />} />
               <Route path="/admin-config" element={<AdminConfig />} />
             </Route>

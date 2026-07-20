@@ -12,12 +12,17 @@ export class RosterRepository {
       SELECT r.id AS roster_id, r.date, r.timing, 
              d.id AS doctor_id, d.employee_id, d.name AS doctor_name, 
              d.designation, d.photo_url, b.name AS branch, l.name AS location,
-             dept.name AS department_name
+             (
+               SELECT dept.name 
+               FROM doctor_assignments da
+               JOIN departments dept ON da.department_id = dept.id
+               WHERE da.doctor_id = d.id AND da.branch_id = r.branch_id AND da.location_id = r.location_id
+               LIMIT 1
+             ) AS department_name
       FROM roster r
       JOIN doctors d ON r.doctor_id = d.id
-      JOIN branches b ON d.branch_id = b.id
-      JOIN locations l ON d.location_id = l.id
-      JOIN departments dept ON d.department_id = dept.id
+      JOIN branches b ON r.branch_id = b.id
+      JOIN locations l ON r.location_id = l.id
       WHERE r.date = ? AND b.name = ?
     `;
     const params = [date, branch];

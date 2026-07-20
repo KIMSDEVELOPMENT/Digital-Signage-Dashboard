@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../../app/context/AuthContext';
 import api from '../../../common/services/api';
 import { Plus, Trash2, Search, Image, Camera, X, Edit2, ToggleLeft, ToggleRight } from 'lucide-react';
-import { TableSkeleton } from '../../../common/components/Skeleton';
+import { TableRowSkeleton } from '../../../common/components/Skeleton';
 import Pagination from '../../../common/components/Pagination';
 import Modal from '../../../common/components/Modal';
 import { toast } from 'react-hot-toast';
@@ -19,10 +19,6 @@ const Doctor = () => {
   // Filter dropdown sources
   const [filterLocationsList, setFilterLocationsList] = useState([]);
   const [filterDepartmentsList, setFilterDepartmentsList] = useState([]);
-
-  // Form dropdown sources
-  const [formLocationsList, setFormLocationsList] = useState([]);
-  const [formDepartmentsList, setFormDepartmentsList] = useState([]);
 
   const [loading, setLoading] = useState(true);
   
@@ -43,31 +39,35 @@ const Doctor = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  
   const [formData, setFormData] = useState({
     employee_id: '',
     name: '',
     designation: '',
-    department_id: '',
-    branch_id: '',
-    location_id: '',
     status: true,
+    assignments: []
   });
+
+  // Temp assignment selector state
+  const [tempBranch, setTempBranch] = useState('');
+  const [tempLocation, setTempLocation] = useState('');
+  const [tempDept, setTempDept] = useState('');
+
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
 
   const debounceRef = useRef(null);
 
-  // 1. Fetch dynamic masters for form & filtering dropdowns
   const fetchMasters = useCallback(async () => {
     try {
-      const branchesRes = await api.get('/branches?status=1');
-      setBranches(branchesRes.data);
+      const branchesRes = await api.get('/branches?status=1', { params: { limit: 1000 } });
+      setBranches(branchesRes.data.data || branchesRes.data);
 
-      const locationsRes = await api.get('/locations?status=1');
-      setLocations(locationsRes.data);
+      const locationsRes = await api.get('/locations?status=1', { params: { limit: 1000 } });
+      setLocations(locationsRes.data.data || locationsRes.data);
 
-      const departmentsRes = await api.get('/departments?status=1');
-      setDepartments(departmentsRes.data);
+      const departmentsRes = await api.get('/departments?status=1', { params: { limit: 1000 } });
+      setDepartments(departmentsRes.data.data || departmentsRes.data);
     } catch (err) {
       console.error('Error fetching masters:', err);
       toast.error('Failed to load doctor configuration masters.');
@@ -78,34 +78,19 @@ const Doctor = () => {
     fetchMasters();
   }, [fetchMasters]);
 
-  // Determine allowed branches for Normal Admin
   const allowedBranches = user.role === 'super_admin'
     ? branches
     : branches.filter((b) => (user.permissions?.branches || []).includes(b.name));
 
-  // Handle selected branch change in form: loads locations under selected branch
-  useEffect(() => {
-    if (formData.branch_id) {
-      const bid = parseInt(formData.branch_id, 10);
-      const filteredLocs = locations.filter((l) => l.branch_id === bid);
-      setFormLocationsList(filteredLocs);
-    } else {
-      setFormLocationsList([]);
-    }
-  }, [formData.branch_id, locations]);
+  // Form Temp Location Dropdown
+  const tempLocationsList = tempBranch 
+    ? locations.filter((l) => l.branch_id === parseInt(tempBranch, 10)) 
+    : [];
 
-  // Handle selected location change in form: loads departments under selected location
-  useEffect(() => {
-    if (formData.location_id) {
-      const lid = parseInt(formData.location_id, 10);
-      const filteredDepts = departments.filter((d) => d.location_id === lid);
-      setFormDepartmentsList(filteredDepts);
-    } else {
-      setFormDepartmentsList([]);
-    }
-  }, [formData.location_id, departments]);
+  const tempDepartmentsList = tempLocation 
+    ? departments.filter((d) => d.location_id === parseInt(tempLocation, 10))
+    : [];
 
-  // Handle branch selection in list filtering: loads locations under branch, resets location selection
   useEffect(() => {
     if (filterBranch) {
       const bid = parseInt(filterBranch, 10);
@@ -117,7 +102,6 @@ const Doctor = () => {
     setFilterLocation('');
   }, [filterBranch, locations]);
 
-  // Handle location selection in list filtering: loads departments under location, resets department selection
   useEffect(() => {
     if (filterLocation) {
       const lid = parseInt(filterLocation, 10);
@@ -129,16 +113,10 @@ const Doctor = () => {
     setFilterDept('');
   }, [filterLocation, departments]);
 
-  // Fetch doctors listing
   const fetchDoctors = useCallback(async (currentSearch) => {
     try {
       setLoading(true);
-      const params = {
-        page,
-        limit,
-        sortBy,
-        sortOrder,
-      };
+      const params = { page, limit, sortBy, sortOrder };
       
       if (currentSearch) params.search = currentSearch;
       if (filterBranch) params.branch_id = filterBranch;
@@ -156,7 +134,6 @@ const Doctor = () => {
     }
   }, [page, limit, sortBy, sortOrder, filterBranch, filterLocation, filterDept]);
 
-  // Refetch on pagination/filter changes
   useEffect(() => {
     fetchDoctors(search);
   }, [page, limit, sortBy, sortOrder, filterBranch, filterLocation, filterDept]);
@@ -164,23 +141,15 @@ const Doctor = () => {
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearch(value);
-
     if (debounceRef.current) clearTimeout(debounceRef.current);
-
     debounceRef.current = setTimeout(() => {
       setPage(1);
       fetchDoctors(value);
     }, 400);
   };
 
-  const handlePageChange = (newPage) => {
-    setPage(newPage);
-  };
-
-  const handleLimitChange = (newLimit) => {
-    setLimit(newLimit);
-    setPage(1);
-  };
+  const handlePageChange = (newPage) => setPage(newPage);
+  const handleLimitChange = (newLimit) => { setLimit(newLimit); setPage(1); };
 
   const handleSort = (column) => {
     if (sortBy === column) {
@@ -205,39 +174,47 @@ const Doctor = () => {
       }
       setPhotoFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result);
-      };
+      reader.onloadend = () => setPhotoPreview(reader.result);
       reader.readAsDataURL(file);
     }
   };
 
   const resetForm = () => {
-    setFormData({
-      employee_id: '',
-      name: '',
-      designation: '',
-      department_id: '',
-      branch_id: '',
-      location_id: '',
-      status: true,
-    });
+    setFormData({ employee_id: '', name: '', designation: '', status: true, assignments: [] });
     setPhotoFile(null);
     setPhotoPreview('');
     setEditingDoctor(null);
+    setTempBranch('');
+    setTempLocation('');
+    setTempDept('');
+  };
+
+  const handleRemoveAssignment = (index) => {
+    const newAssignments = [...formData.assignments];
+    newAssignments.splice(index, 1);
+    setFormData({ ...formData, assignments: newAssignments });
   };
 
   const handleAddDoctor = async (e) => {
     e.preventDefault();
-    const { employee_id, name, designation, department_id, branch_id, location_id, status } = formData;
+    let { employee_id, name, designation, status, assignments } = formData;
 
-    if (!employee_id || !name || !designation || !department_id || !branch_id || !location_id) {
-      toast.error('All form fields are required.');
+    if (!employee_id || !name || !designation) {
+      toast.error('Employee ID, Name, and Designation are required.');
       return;
     }
-    if (!editingDoctor && !photoFile) {
-      toast.error('Please upload a doctor photo.');
+    if (assignments.length === 0) {
+      toast.error('At least one assignment is required.');
       return;
+    }
+
+    name = name.trim();
+    if (!/^Dr\.\s/i.test(name)) {
+      if (/^Dr/i.test(name)) {
+        name = name.replace(/^Dr\.?\s*/i, 'Dr. ');
+      } else {
+        name = 'Dr. ' + name;
+      }
     }
 
     setSubmitting(true);
@@ -245,12 +222,11 @@ const Doctor = () => {
 
     const submissionData = new FormData();
     submissionData.append('employee_id', employee_id.trim());
-    submissionData.append('name', name.trim());
+    submissionData.append('name', name);
     submissionData.append('designation', designation.trim());
-    submissionData.append('department_id', department_id);
-    submissionData.append('branch_id', branch_id);
-    submissionData.append('location_id', location_id);
     submissionData.append('status', status ? '1' : '0');
+    submissionData.append('assignments', JSON.stringify(assignments));
+
     if (photoFile) {
       submissionData.append('photo', photoFile);
     }
@@ -267,7 +243,9 @@ const Doctor = () => {
         });
         toast.success('Doctor registered successfully!', { id: loadToast });
       }
-      setIsModalOpen(false);
+      if (editingDoctor) {
+        setIsModalOpen(false);
+      }
       resetForm();
       fetchDoctors(search);
     } catch (err) {
@@ -279,16 +257,16 @@ const Doctor = () => {
 
   const handleEdit = (doc) => {
     setEditingDoctor(doc);
+    
     setFormData({
       employee_id: doc.employee_id,
       name: doc.name,
       designation: doc.designation,
-      department_id: String(doc.department_id),
-      branch_id: String(doc.branch_id),
-      location_id: String(doc.location_id),
-      status: doc.status,
+      status: !!doc.status,
+      assignments: doc.assignments || [],
     });
-    setPhotoPreview(getFullPhotoUrl(doc.photo_url));
+    setPhotoPreview(doc.photo_url ? getFullPhotoUrl(doc.photo_url) : '');
+    setPhotoFile(null);
     setIsModalOpen(true);
   };
 
@@ -300,10 +278,8 @@ const Doctor = () => {
       submissionData.append('employee_id', doc.employee_id);
       submissionData.append('name', doc.name);
       submissionData.append('designation', doc.designation);
-      submissionData.append('department_id', String(doc.department_id));
-      submissionData.append('branch_id', String(doc.branch_id));
-      submissionData.append('location_id', String(doc.location_id));
       submissionData.append('status', newStatus ? '1' : '0');
+      submissionData.append('assignments', JSON.stringify(doc.assignments || []));
 
       await api.put(`/doctors/${doc.id}`, submissionData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -348,12 +324,9 @@ const Doctor = () => {
 
   return (
     <div className="space-y-6">
-      {/* Controls & Search bar */}
-      <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
-        
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+      <div className="mb-6 flex flex-col xl:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full xl:w-96">
+          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
             <Search className="w-4 h-4" />
           </span>
           <input
@@ -361,13 +334,11 @@ const Doctor = () => {
             placeholder="Search by name, ID, or title..."
             value={search}
             onChange={handleSearchChange}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm transition-all bg-slate-900/40 border border-slate-800 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-white placeholder-slate-500"
+            className="w-full pl-10 pr-4 py-2 rounded-xl text-sm transition-all bg-[#0f172a]/40 border border-slate-800 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-white placeholder-slate-500 shadow-inner"
           />
         </div>
 
-        {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Branch Filter */}
           <div className="relative">
             <select
               value={filterBranch}
@@ -384,7 +355,6 @@ const Doctor = () => {
             </select>
           </div>
 
-          {/* Location Filter */}
           <div className="relative">
             <select
               value={filterLocation}
@@ -402,7 +372,6 @@ const Doctor = () => {
             </select>
           </div>
 
-          {/* Department Filter */}
           <div className="relative">
             <select
               value={filterDept}
@@ -420,163 +389,160 @@ const Doctor = () => {
             </select>
           </div>
 
-          {/* Add Doctor Button */}
           {canCreate && (
             <button
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-semibold text-xs text-slate-950 bg-emerald-400 hover:bg-emerald-300 transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-400/5 ml-auto xl:ml-0"
+              onClick={() => {
+                resetForm();
+                setIsModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-slate-950 font-semibold rounded-xl text-sm transition-all shadow-emerald-500/20 shadow-lg cursor-pointer ml-auto xl:ml-0"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 stroke-[2.5]" />
               Add Doctor
             </button>
           )}
         </div>
       </div>
 
-      {/* Main Table */}
-      {loading ? (
-        <TableSkeleton rows={6} cols={7} />
-      ) : (
-        <div className="glass-panel rounded-2xl border border-slate-800/40 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-900/40 border-b border-slate-850 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                  <th
-                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
-                    onClick={() => handleSort('name')}
-                  >
-                    Clinician{getSortIcon('name')}
-                  </th>
-                  <th
-                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
-                    onClick={() => handleSort('employee_id')}
-                  >
-                    Employee ID{getSortIcon('employee_id')}
-                  </th>
-                  <th
-                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
-                    onClick={() => handleSort('designation')}
-                  >
-                    Title / Designation{getSortIcon('designation')}
-                  </th>
-                  <th
-                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
-                    onClick={() => handleSort('department_name')}
-                  >
-                    Department{getSortIcon('department_name')}
-                  </th>
-                  <th
-                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
-                    onClick={() => handleSort('branch')}
-                  >
-                    Area / Location{getSortIcon('branch')}
-                  </th>
-                  <th
-                    className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
-                    onClick={() => handleSort('status')}
-                  >
-                    Status{getSortIcon('status')}
-                  </th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-850/30 text-sm">
-                {doctors.length > 0 ? (
-                  doctors.map((doc) => (
-                    <tr key={doc.id} className="hover:bg-slate-900/20 transition-colors">
-                      {/* Photo & Name */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full border border-slate-800 overflow-hidden bg-slate-900/80 flex items-center justify-center">
-                            {doc.photo_url ? (
-                              <img 
-                                src={getFullPhotoUrl(doc.photo_url)} 
-                                alt={doc.name} 
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <Image className="w-4.5 h-4.5 text-slate-650" />
-                            )}
-                          </div>
-                          <div>
-                            <span className="font-semibold text-white block">{doc.name}</span>
-                          </div>
+      <div className="glass-panel border border-slate-800/40 rounded-2xl overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto min-h-[400px]">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-800/60 bg-slate-900/40">
+                <th className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none text-xs font-semibold text-slate-400 uppercase tracking-wider" onClick={() => handleSort('name')}>
+                  Clinician{getSortIcon('name')}
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none text-xs font-semibold text-slate-400 uppercase tracking-wider" onClick={() => handleSort('employee_id')}>
+                  Employee ID{getSortIcon('employee_id')}
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none text-xs font-semibold text-slate-400 uppercase tracking-wider" onClick={() => handleSort('designation')}>
+                  Title / Designation{getSortIcon('designation')}
+                </th>
+                <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  Departments
+                </th>
+                <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  Branches
+                </th>
+                <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  Locations
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none text-xs font-semibold text-slate-400 uppercase tracking-wider" onClick={() => handleSort('status')}>
+                  Status{getSortIcon('status')}
+                </th>
+                <th className="px-6 py-4 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/40 text-sm">
+              {loading ? (
+                <TableRowSkeleton rows={5} cols={8} />
+              ) : doctors.length > 0 ? (
+                doctors.map((doc) => {
+                  const depts = [...new Set((doc.assignments || []).map(a => a.department_name))].filter(Boolean);
+                  const branches = [...new Set((doc.assignments || []).map(a => a.branch_name))].filter(Boolean);
+                  const locs = [...new Set((doc.assignments || []).map(a => a.location_name))].filter(Boolean);
+
+                  return (
+                  <tr key={doc.id} className="hover:bg-slate-800/20 transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full border border-slate-800 overflow-hidden bg-slate-900 flex items-center justify-center shrink-0">
+                          {doc.photo_url ? (
+                            <img src={getFullPhotoUrl(doc.photo_url)} alt={doc.name} className="w-full h-full object-cover" loading="lazy" />
+                          ) : (
+                            <Image className="w-4 h-4 text-slate-600" />
+                          )}
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-300 font-mono text-xs">{doc.employee_id}</td>
-                      <td className="px-6 py-4 text-slate-300 font-medium">{doc.designation}</td>
-                      <td className="px-6 py-4 text-slate-300 font-medium">
-                        <span className="px-2.5 py-1 rounded-lg bg-blue-500/5 border border-blue-500/10 text-blue-400 text-xs font-semibold">
-                          {doc.department_name}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-slate-300">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-semibold text-slate-200 text-xs">{doc.branch}</span>
-                          <span className="text-[10px] text-slate-500 font-medium">{doc.location}</span>
+                        <div>
+                          <span className="font-semibold text-white block">{doc.name}</span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={() => handleToggleStatus(doc)}
-                          disabled={!canUpdate}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                            doc.status
-                              ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15'
-                              : 'bg-rose-500/5 border-rose-500/10 text-rose-400 hover:bg-rose-500/15'
-                          }`}
-                        >
-                          {doc.status ? 'Active' : 'Inactive'}
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 text-right space-x-2">
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 font-mono text-xs text-slate-300">{doc.employee_id}</td>
+                    <td className="px-6 py-4 text-slate-300">{doc.designation}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {depts.map((d, i) => (
+                          <span key={i} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            {d}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {branches.map((b, i) => (
+                          <span key={i} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                            {b}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-1">
+                        {locs.map((l, i) => (
+                          <span key={i} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                            {l}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => handleToggleStatus(doc)}
+                        disabled={!canUpdate}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                          doc.status
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                        }`}
+                      >
+                        {doc.status ? 'Active' : 'Inactive'}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2 transition-opacity">
                         {canUpdate && (
-                          <button
-                            onClick={() => handleEdit(doc)}
-                            className="p-2 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-slate-800 hover:text-white hover:border-slate-700 transition-all cursor-pointer"
-                            title="Edit Doctor"
-                          >
+                          <button onClick={() => handleEdit(doc)} className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-emerald-400/10 rounded-lg transition-colors cursor-pointer" title="Edit Doctor">
                             <Edit2 className="w-4 h-4" />
                           </button>
                         )}
                         {canDelete && (
-                          <button
-                            onClick={() => handleDeleteDoctor(doc.id, doc.name)}
-                            className="p-2 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 transition-all cursor-pointer"
-                            title="Delete Doctor"
-                          >
+                          <button onClick={() => handleDeleteDoctor(doc.id, doc.name)} className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer" title="Delete Doctor">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-16 text-center text-slate-500 font-medium">
-                      {search || filterBranch || filterLocation || filterDept
-                        ? 'No doctors match your search criteria.'
-                        : 'No doctors found. Add a doctor to get started.'}
+                      </div>
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <Pagination
-            pagination={pagination}
-            onPageChange={handlePageChange}
-            onLimitChange={handleLimitChange}
-            loading={loading}
-          />
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-500 font-medium">
+                    {search || filterBranch || filterLocation || filterDept
+                      ? 'No doctors match your search criteria.'
+                      : 'No doctors found. Add a doctor to get started.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
 
-      {/* Add / Edit Doctor Modal */}
+        {pagination && pagination.totalRecords > 0 && (
+          <div className="p-4 border-t border-slate-800/60 bg-slate-900/20">
+            <Pagination
+              currentPage={page}
+              totalPages={pagination.totalPages}
+              onPageChange={handlePageChange}
+              totalRecords={pagination.totalRecords}
+              limit={limit}
+            />
+          </div>
+        )}
+      </div>
+
       <Modal
         isOpen={isModalOpen}
         onClose={() => {
@@ -584,172 +550,126 @@ const Doctor = () => {
           resetForm();
         }}
         title={editingDoctor ? 'Edit Doctor Profile' : 'Register New Doctor'}
+        closeOnBackdropClick={false}
+        closeOnEscape={false}
       >
         <form onSubmit={handleAddDoctor} className="space-y-5">
-          {/* Photo Upload with Preview */}
-          <div className="flex flex-col items-center justify-center p-4 border border-dashed border-slate-800 rounded-2xl bg-slate-900/20">
+          <div className="flex flex-col items-center justify-center p-6 border border-dashed border-slate-700/60 rounded-2xl bg-slate-900/30 group transition-all hover:bg-slate-900/50 hover:border-emerald-500/50">
             {photoPreview ? (
-              <div className="relative w-28 h-28 rounded-full border border-slate-700/60 overflow-hidden shadow-inner group">
+              <div className="relative w-24 h-24 rounded-full border border-slate-700/60 overflow-hidden shadow-inner group-hover:border-emerald-500/50 transition-colors">
                 <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPhotoFile(null);
-                    setPhotoPreview('');
-                  }}
-                  className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity"
-                >
+                <button type="button" onClick={() => { setPhotoFile(null); setPhotoPreview(''); }} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
             ) : (
-              <label className="flex flex-col items-center justify-center cursor-pointer space-y-2 group">
-                <div className="w-14 h-14 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center group-hover:border-emerald-500/50 group-hover:bg-slate-850 transition-colors">
-                  <Camera className="w-5 h-5 text-slate-500 group-hover:text-emerald-400" />
-                </div>
+              <label className="flex flex-col items-center justify-center cursor-pointer space-y-2">
                 <div className="text-center">
-                  <p className="text-xs font-semibold text-slate-300">Upload Photo</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">JPG, PNG or WEBP (Max 5MB)</p>
+                  <p className="text-sm font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors">Upload Photo</p>
+                  <p className="text-[11px] text-slate-500 mt-1">JPG, PNG or WEBP (Max 5MB)</p>
                 </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoChange}
-                  className="hidden"
-                />
+                <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
               </label>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {/* Employee ID */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">EMPLOYEE ID</label>
-              <input
-                type="text"
-                placeholder="e.g. EMP1024"
-                value={formData.employee_id}
-                onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-white placeholder-slate-650"
-              />
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Employee ID</label>
+              <input type="text" placeholder="e.g. EMP1024" value={formData.employee_id} onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })} className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner" />
             </div>
-
-            {/* Doctor Name */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">DOCTOR NAME</label>
-              <input
-                type="text"
-                placeholder="Dr. John Doe"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-white placeholder-slate-650"
-              />
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Doctor Name</label>
+              <input type="text" placeholder="Dr. John Doe" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner" />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Designation */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">DESIGNATION</label>
-              <input
-                type="text"
-                placeholder="e.g. Consultant Cardiologist"
-                value={formData.designation}
-                onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-white placeholder-slate-650"
-              />
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Designation</label>
+            <input type="text" placeholder="e.g. Consultant Cardiologist" value={formData.designation} onChange={(e) => setFormData({ ...formData, designation: e.target.value })} className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner" />
+          </div>
 
-            {/* Branch */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">BRANCH</label>
-              <select
-                value={formData.branch_id}
-                onChange={(e) => setFormData({ ...formData, branch_id: e.target.value, department_id: '', location_id: '' })}
-                className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 cursor-pointer"
-              >
+          <div className="space-y-3 p-4 border border-slate-800/60 rounded-2xl bg-slate-900/10">
+            <label className="text-[11px] font-bold text-slate-200 uppercase tracking-wider block">
+              Configuration
+            </label>
+            
+            <div className="flex flex-col gap-3">
+              <select value={tempBranch} onChange={(e) => { setTempBranch(e.target.value); setTempLocation(''); setTempDept(''); }} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 shadow-inner">
                 <option value="">Select Branch</option>
-                {allowedBranches.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
+                {allowedBranches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              <select disabled={!tempBranch} value={tempLocation} onChange={(e) => { setTempLocation(e.target.value); setTempDept(''); }} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 disabled:opacity-50 shadow-inner cursor-pointer">
+                <option value="">Select Location</option>
+                {tempLocationsList.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+              <select disabled={!tempLocation} value={tempDept} onChange={(e) => {
+                const val = e.target.value;
+                if (!val) return;
+                const did = parseInt(val, 10);
+                const lid = parseInt(tempLocation, 10);
+                const bid = parseInt(tempBranch, 10);
+                
+                const isDuplicate = formData.assignments.some(a => a.branch_id === bid && a.location_id === lid && a.department_id === did);
+                if (isDuplicate) {
+                  toast.error('This assignment is already added.');
+                  return;
+                }
+                const branchName = branches.find(b => b.id === bid)?.name;
+                const locName = locations.find(l => l.id === lid)?.name;
+                const deptName = departments.find(d => d.id === did)?.name;
+                
+                setFormData({
+                  ...formData,
+                  assignments: [...formData.assignments, { branch_id: bid, location_id: lid, department_id: did, branch_name: branchName, location_name: locName, department_name: deptName }]
+                });
+                setTempBranch('');
+                setTempLocation('');
+                setTempDept('');
+              }} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 disabled:opacity-50 cursor-pointer shadow-inner">
+                <option value="">Select Department</option>
+                {tempDepartmentsList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
+
+            {formData.assignments.length > 0 ? (
+              <div className="flex flex-col gap-2 mt-3 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
+                {formData.assignments.map((a, idx) => (
+                  <div key={idx} className="flex items-center justify-between px-3 py-2 bg-slate-950/40 border border-slate-800/40 rounded-lg text-xs text-slate-300">
+                    <div className="flex items-center gap-1.5 overflow-hidden">
+                      <span className="font-medium text-emerald-400">{a.branch_name}</span>
+                      <span className="text-slate-500">/</span>
+                      <span className="truncate">{a.location_name}</span>
+                      <span className="text-slate-500 px-1">&bull;</span>
+                      <span className="truncate text-slate-200">{a.department_name}</span>
+                    </div>
+                    <button type="button" onClick={() => handleRemoveAssignment(idx)} className="text-slate-500 hover:text-rose-400 p-1 cursor-pointer transition-colors" title="Remove Assignment">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 italic mt-2">No configuration added yet.</p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Location (dynamically loaded based on branch) */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">LOCATION</label>
-              <select
-                value={formData.location_id}
-                disabled={!formData.branch_id}
-                onChange={(e) => setFormData({ ...formData, location_id: e.target.value, department_id: '' })}
-                className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              >
-                <option value="">
-                  {!formData.branch_id ? 'Select Branch first...' : 'Select Location'}
-                </option>
-                {formLocationsList.map((loc) => (
-                  <option key={loc.id} value={loc.id}>{loc.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Department (dynamically loaded based on location) */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">DEPARTMENT</label>
-              <select
-                value={formData.department_id}
-                disabled={!formData.location_id}
-                onChange={(e) => setFormData({ ...formData, department_id: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              >
-                <option value="">
-                  {!formData.location_id ? 'Select Location first...' : 'Select Department'}
-                </option>
-                {formDepartmentsList.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-350 uppercase tracking-wider mb-2">
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-slate-200 uppercase tracking-wider block">
               Active Status
             </label>
-            <button
-              type="button"
-              onClick={() => setFormData({ ...formData, status: !formData.status })}
-              className="flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
-            >
-              {formData.status ? (
-                <ToggleRight className="w-8 h-8 text-emerald-400" />
-              ) : (
-                <ToggleLeft className="w-8 h-8 text-slate-500" />
-              )}
+            <button type="button" onClick={() => setFormData({ ...formData, status: !formData.status })} className="flex items-center gap-3 font-semibold text-slate-200 cursor-pointer text-sm w-fit transition-opacity hover:opacity-80">
+              {formData.status ? <ToggleRight className="w-6 h-6 text-emerald-400" /> : <ToggleLeft className="w-6 h-6 text-slate-500" />}
               {formData.status ? 'Active' : 'Inactive'}
             </button>
           </div>
 
-          {/* Buttons */}
-          <div className="flex items-center gap-3 pt-4 border-t border-slate-800/40">
-            <button
-              type="button"
-              onClick={() => {
-                setIsModalOpen(false);
-                resetForm();
-              }}
-              className="flex-1 py-2.5 rounded-xl border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-colors font-semibold text-sm cursor-pointer"
-            >
+          <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800/60 mt-4">
+            <button type="button" onClick={() => { setIsModalOpen(false); resetForm(); }} className="px-6 py-2.5 bg-transparent border border-slate-700 hover:bg-slate-800 text-slate-300 font-semibold rounded-xl text-sm transition-colors cursor-pointer">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 py-2.5 rounded-xl font-semibold text-sm text-slate-950 bg-emerald-400 hover:bg-emerald-300 disabled:bg-emerald-500/50 disabled:text-slate-900/40 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-400/5"
-            >
-              {editingDoctor ? 'Save Changes' : 'Register Doctor'}
+            <button type="submit" disabled={submitting} className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-bold rounded-xl text-sm transition-colors cursor-pointer disabled:opacity-50">
+              {submitting ? 'Processing...' : (editingDoctor ? 'Save Changes' : 'Register Doctor')}
             </button>
           </div>
         </form>

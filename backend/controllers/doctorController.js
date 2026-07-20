@@ -13,7 +13,6 @@ export async function getDoctors(req, res) {
     const parsedBranchId = branch_id ? parseInt(branch_id, 10) : null;
     const parsedLocationId = location_id ? parseInt(location_id, 10) : null;
 
-    // If no pagination params provided, return full list (backwards compatible)
     if (!page) {
       if (req.user.role === 'normal_admin') {
         const branches = await userRepository.getUserBranches(req.user.id);
@@ -30,7 +29,6 @@ export async function getDoctors(req, res) {
         return res.status(200).json(doctors.map((d) => d.toPublic()));
       }
 
-      // Super admin — full filter support
       const doctors = await doctorRepository.findWithFilters({
         branches: branch ? [branch] : (parsedBranchId ? [parsedBranchId] : null),
         locations: null,
@@ -41,7 +39,6 @@ export async function getDoctors(req, res) {
       return res.status(200).json(doctors.map((d) => d.toPublic()));
     }
 
-    // Paginated response
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
 
@@ -63,14 +60,12 @@ export async function getDoctors(req, res) {
       paginationParams.departmentIds = userDepartmentIds;
     }
 
-    // Apply user-selected filters from query params
     if (branch) paginationParams.branchId = branch;
     if (parsedBranchId) paginationParams.branchId = parsedBranchId;
     if (parsedLocationId) paginationParams.locationId = parsedLocationId;
     if (department_id) paginationParams.departmentId = department_id;
 
     const { data, totalRecords } = await doctorRepository.findPaginated(paginationParams);
-
     const totalPages = Math.ceil(totalRecords / limitNum);
 
     return res.status(200).json({
@@ -92,66 +87,48 @@ export async function getDoctors(req, res) {
 }
 
 export async function createDoctor(req, res) {
-  const { employee_id, name, designation, department_id, branch_id, location_id } = req.body;
+  const { employee_id, name, designation, assignments } = req.body;
+  
+  let parsedAssignments = [];
+  if (assignments) {
+    try {
+      parsedAssignments = JSON.parse(assignments);
+    } catch (e) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'Invalid assignments format.' });
+    }
+  }
 
-  if (!employee_id || !name || !designation || !department_id || !branch_id || !location_id) {
+  if (!employee_id || !name || !designation || !parsedAssignments.length) {
     if (req.file) fs.unlinkSync(req.file.path);
-    return res.status(400).json({ message: 'All fields are required.' });
+    return res.status(400).json({ message: 'Employee ID, Name, Designation, and at least one assignment are required.' });
   }
 
-  if (!req.file) {
-    return res.status(400).json({ message: 'Doctor photo is required.' });
-  }
-
-  const photo_url = `/uploads/${req.file.filename}`;
+  const photo_url = req.file ? `/uploads/${req.file.filename}` : null;
 
   try {
-    const branch = await branchRepository.findById(branch_id);
-    if (!branch) {
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ message: 'Selected branch does not exist.' });
-    }
-
-    const location = await locationRepository.findById(location_id);
-    if (!location || location.branch_id !== parseInt(branch_id, 10)) {
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ message: 'Invalid location for the selected branch.' });
-    }
-
-    const department = await departmentRepository.findById(department_id);
-    if (!department) {
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ message: 'Selected department does not exist.' });
-    }
-
-    // Composite uniqueness check: (branch_id, employee_id)
-    const empTaken = await doctorRepository.isEmployeeIdTaken(employee_id, branch_id);
+    const empTaken = await doctorRepository.isEmployeeIdTakenGlobally(employee_id);
     if (empTaken) {
-      fs.unlinkSync(req.file.path);
-      return res.status(400).json({ message: 'A doctor with this Employee ID already exists in this branch.' });
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'A doctor with this Employee ID already exists.' });
     }
 
-    const id = await doctorRepository.create({
+    const id = await doctorRepository.createDoctor({
       employee_id,
       name,
       designation,
-      department_id,
-      branch_id,
-      location_id,
       photo_url,
     });
+
+    await doctorRepository.syncAssignments(id, parsedAssignments);
 
     return res.status(201).json({
       id,
       employee_id,
       name,
       designation,
-      department_id,
-      branch_id,
-      location_id,
-      branch: branch.name,
-      location: location.name,
       photo_url,
+      assignments: parsedAssignments
     });
   } catch (error) {
     console.error('Create doctor error:', error);
@@ -162,11 +139,21 @@ export async function createDoctor(req, res) {
 
 export async function updateDoctor(req, res) {
   const { id } = req.params;
-  const { employee_id, name, designation, department_id, branch_id, location_id, status } = req.body;
+  const { employee_id, name, designation, status, assignments } = req.body;
 
-  if (!employee_id || !name || !designation || !department_id || !branch_id || !location_id) {
+  let parsedAssignments = [];
+  if (assignments) {
+    try {
+      parsedAssignments = JSON.parse(assignments);
+    } catch (e) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'Invalid assignments format.' });
+    }
+  }
+
+  if (!employee_id || !name || !designation || !parsedAssignments.length) {
     if (req.file) fs.unlinkSync(req.file.path);
-    return res.status(400).json({ message: 'All fields are required.' });
+    return res.status(400).json({ message: 'Employee ID, Name, Designation, and at least one assignment are required.' });
   }
 
   try {
@@ -176,62 +163,39 @@ export async function updateDoctor(req, res) {
       return res.status(404).json({ message: 'Doctor not found.' });
     }
 
-    const branch = await branchRepository.findById(branch_id);
-    if (!branch) {
-      if (req.file) fs.unlinkSync(req.file.path);
-      return res.status(400).json({ message: 'Selected branch does not exist.' });
-    }
-
-    const location = await locationRepository.findById(location_id);
-    if (!location || location.branch_id !== parseInt(branch_id, 10)) {
-      if (req.file) fs.unlinkSync(req.file.path);
-      return res.status(400).json({ message: 'Invalid location for the selected branch.' });
-    }
-
-    const department = await departmentRepository.findById(department_id);
-    if (!department) {
-      if (req.file) fs.unlinkSync(req.file.path);
-      return res.status(400).json({ message: 'Selected department does not exist.' });
-    }
-
-    // Composite uniqueness check: skip self
-    const empTaken = await doctorRepository.isEmployeeIdTaken(employee_id, branch_id, id);
+    const empTaken = await doctorRepository.isEmployeeIdTakenGlobally(employee_id, id);
     if (empTaken) {
       if (req.file) fs.unlinkSync(req.file.path);
-      return res.status(400).json({ message: 'A doctor with this Employee ID already exists in this branch.' });
+      return res.status(400).json({ message: 'Another doctor with this Employee ID already exists.' });
     }
 
     let photo_url = existing.photo_url;
     if (req.file) {
-      // Delete old photo
       const oldPath = path.join(process.cwd(), existing.photo_url);
       if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       photo_url = `/uploads/${req.file.filename}`;
     }
 
-    const parsedStatus = status !== undefined ? (status ? 1 : 0) : 1;
+    const parsedStatus = status !== undefined ? (status == 'true' || status == 1 ? 1 : 0) : 1;
 
-    await doctorRepository.update(id, {
+    await doctorRepository.updateDoctor(id, {
       employee_id,
       name,
       designation,
-      department_id,
-      branch_id,
-      location_id,
       photo_url,
       status: parsedStatus,
     });
+
+    await doctorRepository.syncAssignments(id, parsedAssignments);
 
     return res.status(200).json({
       id,
       employee_id,
       name,
       designation,
-      department_id,
-      branch_id,
-      location_id,
       photo_url,
       status: !!parsedStatus,
+      assignments: parsedAssignments
     });
   } catch (error) {
     console.error('Update doctor error:', error);
@@ -251,8 +215,10 @@ export async function deleteDoctor(req, res) {
 
     await doctorRepository.deleteById(id);
 
-    const photoPath = path.join(process.cwd(), doctor.photo_url);
-    if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+    if (doctor.photo_url) {
+      const photoPath = path.join(process.cwd(), doctor.photo_url);
+      if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+    }
 
     return res.status(200).json({ message: 'Doctor deleted successfully.' });
   } catch (error) {

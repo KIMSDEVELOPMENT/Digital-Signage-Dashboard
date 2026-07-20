@@ -2,10 +2,10 @@ import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 
-const Modal = ({ isOpen, onClose, title, children }) => {
+const Modal = ({ isOpen, onClose, title, children, closeOnEscape = true, closeOnBackdropClick = true }) => {
   useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && closeOnEscape) onClose();
     };
     
     if (isOpen) {
@@ -17,7 +17,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
       document.body.style.overflow = 'unset';
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, closeOnEscape]);
 
   return (
     <AnimatePresence>
@@ -28,7 +28,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={closeOnBackdropClick ? onClose : undefined}
             className="fixed inset-0 bg-black/70 backdrop-blur-sm"
           />
 

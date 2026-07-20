@@ -39,6 +39,22 @@ export const TableSkeleton = ({ rows = 5, cols = 4 }) => {
   );
 };
 
+export const TableRowSkeleton = ({ rows = 5, cols = 4 }) => {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, rIdx) => (
+        <tr key={rIdx} className="animate-pulse border-b border-slate-800/40 last:border-0">
+          {Array.from({ length: cols }).map((_, cIdx) => (
+            <td key={cIdx} className="px-6 py-4">
+              <div className="h-4 bg-slate-800/60 rounded w-full" />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+};
+
 export const StatsSkeleton = () => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse">

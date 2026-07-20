@@ -32,12 +32,6 @@ const DashboardLayout = () => {
       visible: true, // Always visible for logged in users
     },
     {
-      name: 'Departments',
-      path: '/departments',
-      icon: Layers,
-      visible: hasPermission('Department', 'read'),
-    },
-    {
       name: 'Doctors Directory',
       path: '/doctors',
       icon: Users,
@@ -58,6 +52,18 @@ const DashboardLayout = () => {
       path: '/branches',
       icon: Building2,
       visible: user?.role === 'super_admin',
+    },
+    {
+      name: 'Location Master',
+      path: '/locations',
+      icon: Building2,
+      visible: user?.role === 'super_admin',
+    },
+    {
+      name: 'Department Master',
+      path: '/departments',
+      icon: Layers,
+      visible: hasPermission('Department', 'read'),
     },
     {
       name: 'Admin Users',

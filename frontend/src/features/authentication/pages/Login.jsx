@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../app/context/AuthContext';
 import { toast } from 'react-hot-toast';
 import { User, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
-import logoImg from '../../../common/assets/kims-logo.png';
+import logoImg from '../../../common/assets/logo.png';
 
 const Login = () => {
   const { login } = useAuth();
@@ -48,13 +48,11 @@ const Login = () => {
           
           {/* Logo and Header */}
           <div className="flex flex-col items-center text-center mb-8">
-            <div className="w-24 h-24 rounded-2xl bg-slate-900/60 border border-slate-850 p-2 flex items-center justify-center shadow-inner mb-4">
-              <img 
-                src={logoImg} 
-                alt="KIMS Logo" 
-                className="w-full h-full object-contain"
-              />
-            </div>
+            <img 
+              src={logoImg} 
+              alt="Logo" 
+              className="h-24 w-auto object-contain mb-4"
+            />
             <h2 className="text-2xl md:text-3xl font-heading font-extrabold tracking-tight text-white">
               Kalinga Institute <br/>
               <span className="bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">

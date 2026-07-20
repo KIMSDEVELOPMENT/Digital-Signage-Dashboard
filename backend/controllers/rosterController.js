@@ -108,13 +108,14 @@ export async function previewRoster(req, res) {
     const pool = getPool();
     // Fetch valid branch/locations configuration from normalized tables
     const [configRows] = await pool.query(`
-      SELECT b.name AS branch, l.name AS location 
+      SELECT b.id AS branch_id, b.name AS branch, l.id AS location_id, l.name AS location 
       FROM locations l
       JOIN branches b ON l.branch_id = b.id
       WHERE b.status = 1 AND l.status = 1
     `);
     const validBranchLocations = {};
     const validBranches = new Set();
+    const idMap = {};
     configRows.forEach(row => {
       const b = row.branch.toLowerCase();
       validBranches.add(b);
@@ -122,6 +123,7 @@ export async function previewRoster(req, res) {
         validBranchLocations[b] = new Set();
       }
       validBranchLocations[b].add(row.location.toLowerCase());
+      idMap[`${b}_${row.location.toLowerCase()}`] = { branch_id: row.branch_id, location_id: row.location_id };
     });
 
     const branchLower = branch.toLowerCase();
@@ -150,8 +152,13 @@ export async function previewRoster(req, res) {
     const doctorLookup = {};
     doctorsList.forEach(doc => {
       const nameKey = doc.name.trim().toLowerCase();
-      const deptId = doc.department_id;
-      doctorLookup[`${nameKey}_${deptId}`] = doc;
+      if (doc.assignments && doc.assignments.length > 0) {
+        doc.assignments.forEach(assignment => {
+          if (assignment.branch_name && assignment.branch_name.toLowerCase() === branch.toLowerCase()) {
+            doctorLookup[`${nameKey}_${assignment.department_id}`] = doc;
+          }
+        });
+      }
     });
 
     // Phase 2: Data validation
@@ -235,6 +242,16 @@ export async function previewRoster(req, res) {
         errors.push(`Row ${rowNum}: Timing is empty.`);
       }
 
+      let branchId = null;
+      let locationId = null;
+      if (rowSite && rowBlock) {
+         const ids = idMap[`${rowSite.toLowerCase()}_${rowBlock.toLowerCase()}`];
+         if (ids) {
+            branchId = ids.branch_id;
+            locationId = ids.location_id;
+         }
+      }
+
       previewData.push({
         date: dateStr,
         site_name: rowSite,
@@ -243,7 +260,9 @@ export async function previewRoster(req, res) {
         doctor_name: rowDocName,
         timing: rowTiming,
         employee_id: employeeId,
-        doctor_id: doctorId
+        doctor_id: doctorId,
+        branch_id: branchId,
+        location_id: locationId
       });
     });
 
@@ -293,7 +312,23 @@ export async function importRoster(req, res) {
       if (!doctor) {
         missingDoctors.push(item.employee_id || item.doctor_id);
       } else {
-        if (allowedBranches && !allowedBranches.map(b => b.toLowerCase()).includes(doctor.branch.toLowerCase())) {
+        // Need to find if doctor is assigned to this branch
+        let isAssigned = false;
+        let assignedBranchName = '';
+        if (doctor.assignments && doctor.assignments.length > 0) {
+          const assignment = doctor.assignments.find(a => a.branch_id === item.branch_id);
+          if (assignment) {
+             isAssigned = true;
+             assignedBranchName = assignment.branch_name;
+          }
+        }
+        
+        if (!isAssigned) {
+           unauthorizedEmployees.push(doctor.name); // Maybe not "unauthorized", but "unassigned" to this branch
+           continue;
+        }
+
+        if (allowedBranches && !allowedBranches.map(b => b.toLowerCase()).includes(assignedBranchName.toLowerCase())) {
           unauthorizedEmployees.push(doctor.name);
           continue;
         }
@@ -301,8 +336,8 @@ export async function importRoster(req, res) {
           date: item.date,
           doctor_id: doctor.id,
           timing: item.timing || 'Not Scheduled',
-          branch_id: doctor.branch_id,
-          location_id: doctor.location_id
+          branch_id: item.branch_id,
+          location_id: item.location_id
         });
       }
     }
@@ -376,10 +411,10 @@ export async function getRosterByDate(req, res) {
 }
 
 export async function addManualRoster(req, res) {
-  const { date, doctor_id, timing } = req.body;
+  const { date, doctor_id, timing, branch } = req.body;
 
-  if (!date || !doctor_id || !timing) {
-    return res.status(400).json({ message: 'Date, doctor ID, and timing are required.' });
+  if (!date || !doctor_id || !timing || !branch) {
+    return res.status(400).json({ message: 'Date, doctor ID, timing, and branch are required.' });
   }
 
   try {
@@ -389,18 +424,23 @@ export async function addManualRoster(req, res) {
     }
 
     if (req.user && req.user.role === 'normal_admin') {
-      const hasAccess = await userRepository.hasBranchAccess(req.user.id, doctor.branch);
+      const hasAccess = await userRepository.hasBranchAccess(req.user.id, branch);
       if (!hasAccess) {
-        return res.status(403).json({ message: 'You do not have permission for this doctor\'s branch.' });
+        return res.status(403).json({ message: 'You do not have permission for this branch.' });
       }
+    }
+
+    const assignment = doctor.assignments.find(a => a.branch_name && a.branch_name.toLowerCase() === branch.toLowerCase());
+    if (!assignment) {
+      return res.status(400).json({ message: 'Doctor is not assigned to this branch.' });
     }
 
     await rosterRepository.addManualEntry({
       date,
       doctor_id: doctor.id,
       timing,
-      branch_id: doctor.branch_id,
-      location_id: doctor.location_id
+      branch_id: assignment.branch_id,
+      location_id: assignment.location_id
     });
 
     return res.status(201).json({ message: 'Manual roster entry added successfully.' });

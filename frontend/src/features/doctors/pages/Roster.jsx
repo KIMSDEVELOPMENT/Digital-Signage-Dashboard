@@ -33,6 +33,7 @@ const Roster = () => {
   const [file, setFile] = useState(null);
   const [previewRows, setPreviewRows] = useState([]);
   const [todayRoster, setTodayRoster] = useState([]);
+  const [searchBranch, setSearchBranch] = useState('');
   const [manualSearch, setManualSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
@@ -78,14 +79,20 @@ const Roster = () => {
   }, [selectedBranch, selectedDate]);
 
   useEffect(() => {
-    if (!manualSearch || !selectedBranch) {
+    // If selectedBranch changes and searchBranch is empty, sync it
+    if (selectedBranch && !searchBranch) setSearchBranch(selectedBranch);
+  }, [selectedBranch, searchBranch]);
+
+  useEffect(() => {
+    const branchToSearch = searchBranch || selectedBranch;
+    if (!manualSearch || !branchToSearch) {
       setSearchResults([]);
       return;
     }
     const search = async () => {
       setIsSearching(true);
       try {
-        const res = await api.get('/doctors', { params: { search: manualSearch, branches: selectedBranch, status: 1 } });
+        const res = await api.get('/doctors', { params: { search: manualSearch, branch: branchToSearch, status: 1 } });
         setSearchResults(res.data.data || res.data); // Adjust based on pagination if any
       } catch (err) {
         console.error(err);
@@ -95,7 +102,7 @@ const Roster = () => {
     };
     const timeoutId = setTimeout(search, 300);
     return () => clearTimeout(timeoutId);
-  }, [manualSearch, selectedBranch]);
+  }, [manualSearch, searchBranch, selectedBranch]);
 
   const handleAddManualEntry = async (e) => {
     e.preventDefault();
@@ -106,7 +113,8 @@ const Roster = () => {
       await api.post('/roster/manual', {
         date: selectedDate,
         doctor_id: selectedDoctor.id,
-        timing: manualTiming
+        timing: manualTiming,
+        branch: selectedBranch
       });
       toast.success('Manual entry added successfully!', { id: loadToast });
       setManualSearch('');
@@ -343,6 +351,24 @@ const Roster = () => {
               {/* Manual Entry Form */}
               {hasPermission('Duty Roster', 'update') && (
                 <form onSubmit={handleAddManualEntry} className="flex flex-col sm:flex-row items-end gap-3 bg-slate-900/40 p-4 rounded-xl border border-slate-800">
+                  {user?.role === 'super_admin' && (
+                    <div className="w-full sm:w-32 md:w-40 space-y-1.5 shrink-0">
+                      <label className="text-xs font-semibold text-slate-300">Doctor Branch</label>
+                      <select
+                        value={searchBranch || selectedBranch}
+                        onChange={(e) => {
+                          setSearchBranch(e.target.value);
+                          setSearchResults([]);
+                          setManualSearch('');
+                        }}
+                        className="w-full px-3 py-2 rounded-lg text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 cursor-pointer"
+                      >
+                        {allowedBranches.map((b) => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="flex-1 w-full space-y-1.5 relative">
                     <label className="text-xs font-semibold text-slate-300">Doctor Search</label>
                     <div className="relative">

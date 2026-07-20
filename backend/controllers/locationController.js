@@ -1,157 +1,124 @@
-import locationRepository from '../repositories/LocationRepository.js';
-import branchRepository from '../repositories/BranchRepository.js';
+import { getPool } from '../config/db.js';
 
-export async function getLocations(req, res) {
+export const getLocations = async (req, res) => {
   try {
-    const { page, limit, search, sortBy, sortOrder, status, branch_id } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const offset = (page - 1) * limit;
 
-    const parsedBranchId = branch_id ? parseInt(branch_id, 10) : null;
-    const parsedStatus = status !== undefined ? parseInt(status, 10) : null;
+    const pool = getPool();
+    
+    let query = `
+      SELECT l.*, b.name as branch_name 
+      FROM locations l
+      JOIN branches b ON l.branch_id = b.id
+      WHERE 1=1
+    `;
+    const queryParams = [];
 
-    if (!page) {
-      const locations = await locationRepository.findAll(parsedStatus, parsedBranchId);
-      return res.status(200).json(locations.map((l) => l.toPublic()));
+    if (search) {
+      query += ` AND (l.name LIKE ? OR b.name LIKE ?)`;
+      queryParams.push(`%${search}%`, `%${search}%`);
     }
 
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
+    // Count total rows
+    const countQuery = `SELECT COUNT(*) as total FROM (${query}) AS sub`;
+    const [countRows] = await pool.query(countQuery, queryParams);
+    const total = countRows[0].total;
 
-    const { data, totalRecords } = await locationRepository.findPaginated({
-      page: pageNum,
-      limit: limitNum,
-      search: search || '',
-      branchId: parsedBranchId,
-      sortBy: sortBy || 'name',
-      sortOrder: sortOrder || 'asc',
+    // Fetch paginated rows
+    query += ` ORDER BY l.id DESC LIMIT ? OFFSET ?`;
+    queryParams.push(limit, offset);
+
+    const [rows] = await pool.query(query, queryParams);
+
+    res.json({
+      data: rows,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit)
     });
-
-    const totalPages = Math.ceil(totalRecords / limitNum);
-
-    return res.status(200).json({
-      success: true,
-      data: data.map((l) => l.toPublic()),
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        totalRecords,
-        totalPages,
-        hasNextPage: pageNum < totalPages,
-        hasPreviousPage: pageNum > 1,
-      },
-    });
-  } catch (error) {
-    console.error('Get locations error:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to fetch locations.' });
   }
-}
+};
 
-export async function getLocationById(req, res) {
-  const { id } = req.params;
+export const createLocation = async (req, res) => {
   try {
-    const location = await locationRepository.findById(id);
-    if (!location) {
-      return res.status(404).json({ message: 'Location not found.' });
+    const { branch_id, name, status } = req.body;
+    
+    if (!branch_id || !name) {
+      return res.status(400).json({ message: 'Branch ID and Location name are required.' });
     }
-    return res.status(200).json(location.toPublic());
-  } catch (error) {
-    console.error('Get location by ID error:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
-  }
-}
 
-export async function createLocation(req, res) {
-  const { name, branch_id, status } = req.body;
+    const pool = getPool();
+    
+    // Check for duplicates
+    const [existing] = await pool.query(
+      'SELECT id FROM locations WHERE branch_id = ? AND name = ?',
+      [branch_id, name.trim()]
+    );
+    if (existing.length > 0) {
+      return res.status(400).json({ message: 'This location already exists for the selected branch.' });
+    }
 
-  if (!name || !name.trim()) {
-    return res.status(400).json({ message: 'Location name is required.' });
-  }
-  if (!branch_id) {
-    return res.status(400).json({ message: 'Branch ID is required.' });
-  }
+    const [result] = await pool.query(
+      'INSERT INTO locations (branch_id, name, status) VALUES (?, ?, ?)',
+      [branch_id, name.trim(), status !== undefined ? status : 1]
+    );
 
+    res.status(201).json({ message: 'Location created successfully.', id: result.insertId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to create location.' });
+  }
+};
+
+export const updateLocation = async (req, res) => {
   try {
-    const branch = await branchRepository.findById(branch_id);
-    if (!branch) {
-      return res.status(400).json({ message: 'Selected branch does not exist.' });
+    const { id } = req.params;
+    const { branch_id, name, status } = req.body;
+
+    if (!branch_id || !name) {
+      return res.status(400).json({ message: 'Branch ID and Location name are required.' });
     }
 
-    const existing = await locationRepository.findByNameAndBranch(name.trim(), branch_id);
-    if (existing) {
-      return res.status(400).json({ message: 'Location already exists under this branch.' });
+    const pool = getPool();
+
+    // Check for duplicates
+    const [existing] = await pool.query(
+      'SELECT id FROM locations WHERE branch_id = ? AND name = ? AND id != ?',
+      [branch_id, name.trim(), id]
+    );
+    if (existing.length > 0) {
+      return res.status(400).json({ message: 'Another location with this name already exists for the selected branch.' });
     }
 
-    const parsedStatus = status !== undefined ? (status ? 1 : 0) : 1;
-    const id = await locationRepository.create({
-      branch_id,
-      name: name.trim(),
-      status: parsedStatus,
-    });
-    return res.status(201).json({ id, branch_id, name: name.trim(), status: !!parsedStatus });
-  } catch (error) {
-    console.error('Create location error:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
-  }
-}
+    await pool.query(
+      'UPDATE locations SET branch_id = ?, name = ?, status = ? WHERE id = ?',
+      [branch_id, name.trim(), status !== undefined ? status : 1, id]
+    );
 
-export async function updateLocation(req, res) {
-  const { id } = req.params;
-  const { name, branch_id, status } = req.body;
-
-  if (!name || !name.trim()) {
-    return res.status(400).json({ message: 'Location name is required.' });
+    res.json({ message: 'Location updated successfully.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to update location.' });
   }
-  if (!branch_id) {
-    return res.status(400).json({ message: 'Branch ID is required.' });
-  }
+};
 
+export const deleteLocation = async (req, res) => {
   try {
-    const location = await locationRepository.findById(id);
-    if (!location) {
-      return res.status(404).json({ message: 'Location not found.' });
-    }
-
-    const branch = await branchRepository.findById(branch_id);
-    if (!branch) {
-      return res.status(400).json({ message: 'Selected branch does not exist.' });
-    }
-
-    const existing = await locationRepository.findByNameAndBranch(name.trim(), branch_id);
-    if (existing && existing.id !== parseInt(id, 10)) {
-      return res.status(400).json({ message: 'Location name already exists under this branch.' });
-    }
-
-    const parsedStatus = status !== undefined ? (status ? 1 : 0) : 1;
-    await locationRepository.update(id, {
-      branch_id,
-      name: name.trim(),
-      status: parsedStatus,
-    });
-    return res.status(200).json({ id, branch_id, name: name.trim(), status: !!parsedStatus });
-  } catch (error) {
-    console.error('Update location error:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+    const { id } = req.params;
+    const pool = getPool();
+    
+    // Soft delete by setting status = 0
+    await pool.query('UPDATE locations SET status = 0 WHERE id = ?', [id]);
+    
+    res.json({ message: 'Location deactivated successfully.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to delete location.' });
   }
-}
-
-export async function deleteLocation(req, res) {
-  const { id } = req.params;
-  try {
-    const location = await locationRepository.findById(id);
-    if (!location) {
-      return res.status(404).json({ message: 'Location not found.' });
-    }
-
-    const hasDeps = await locationRepository.hasDependencies(id);
-    if (hasDeps) {
-      return res.status(400).json({
-        message: 'Cannot delete location. It has departments or doctors assigned to it.',
-      });
-    }
-
-    await locationRepository.deleteById(id);
-    return res.status(200).json({ message: 'Location deleted successfully.' });
-  } catch (error) {
-    console.error('Delete location error:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
-  }
-}
+};

@@ -31,15 +31,17 @@ const Admins = () => {
   const fetchConfigMasters = async () => {
     try {
       const branchesRes = await api.get('/branches?status=1');
-      const branchesData = branchesRes.data.map(b => b.name);
-      setDbBranches(branchesData);
+      const branchesData = branchesRes.data.data || branchesRes.data;
+      const branchNames = branchesData.map(b => b.name);
+      setDbBranches(branchNames);
 
-      const locationsRes = await api.get('/locations?status=1');
+      const locationsRes = await api.get('/locations?status=1', { params: { limit: 1000 } });
+      const locationsArray = locationsRes.data.data || locationsRes.data;
       const mapping = {};
-      branchesData.forEach(name => {
+      branchNames.forEach(name => {
         mapping[name] = [];
       });
-      locationsRes.data.forEach(loc => {
+      locationsArray.forEach(loc => {
         const bName = loc.branch_name;
         if (bName) {
           if (!mapping[bName]) mapping[bName] = [];

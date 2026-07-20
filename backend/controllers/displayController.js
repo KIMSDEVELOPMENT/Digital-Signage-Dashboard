@@ -80,14 +80,17 @@ export const getScreenPlaylist = async (req, res) => {
         SELECT d.id, d.name, d.designation, d.photo_url, dept.name AS department_name, r.timing
         FROM roster r
         JOIN doctors d ON r.doctor_id = d.id
-        JOIN departments dept ON d.department_id = dept.id
+        JOIN doctor_assignments da ON da.doctor_id = d.id 
+             AND da.branch_id = r.branch_id 
+             AND da.location_id = r.location_id
+        JOIN departments dept ON da.department_id = dept.id
         WHERE r.date = CURRENT_DATE
-          AND d.location_id IN (?)
+          AND r.location_id IN (?)
       `;
       const queryParams = [locationIds];
 
       if (excludedDeptIds.length > 0) {
-        doctorQuery += ` AND d.department_id NOT IN (?)`;
+        doctorQuery += ` AND da.department_id NOT IN (?)`;
         queryParams.push(excludedDeptIds);
       }
 
