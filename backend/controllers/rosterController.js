@@ -5,6 +5,7 @@ import rosterRepository from '../repositories/RosterRepository.js';
 import userRepository from '../repositories/UserRepository.js';
 import departmentRepository from '../repositories/DepartmentRepository.js';
 import { getPool } from '../config/db.js';
+import { notifyUpdate } from '../utils/sse.js';
 
 // Resolve url parameters case-insensitively and ignoring non-alphanumeric chars
 async function resolveLocation(branch, locParam) {
@@ -150,12 +151,14 @@ export async function previewRoster(req, res) {
     // Fetch all active doctors for this branch
     const doctorsList = await doctorRepository.findWithFilters({ branches: [branch], status: 1 });
     const doctorLookup = {};
+    const docBranchBlockMap = {}; // Maps nameKey -> assigned block for this branch
     doctorsList.forEach(doc => {
       const nameKey = doc.name.trim().toLowerCase();
       if (doc.assignments && doc.assignments.length > 0) {
         doc.assignments.forEach(assignment => {
           if (assignment.branch_name && assignment.branch_name.toLowerCase() === branch.toLowerCase()) {
             doctorLookup[`${nameKey}_${assignment.department_id}`] = doc;
+            docBranchBlockMap[nameKey] = assignment.location_name.toLowerCase();
           }
         });
       }
@@ -164,8 +167,10 @@ export async function previewRoster(req, res) {
     // Phase 2: Data validation
     const errors = [];
     const previewData = [];
+    const excelDocBlockTracker = {}; // Tracks nameKey -> blockName scheduled in the Excel sheet
 
-    data.forEach((row, index) => {
+    for (let index = 0; index < data.length; index++) {
+      const row = data[index];
       const rowNum = index + 2;
       const rowDate = row['Date'];
       const rowSite = row['Site Name'] ? String(row['Site Name']).trim() : '';
@@ -176,7 +181,7 @@ export async function previewRoster(req, res) {
 
       // Skip the template instruction row if present
       if (!rowDate && rowSite === branch && !rowBlock && !rowDept && !rowDocName) {
-        return;
+        continue;
       }
 
       let dateStr = '';
@@ -187,6 +192,20 @@ export async function previewRoster(req, res) {
           // Convert Excel serial number to JS Date
           const jsDate = new Date((rowDate - 25569) * 86400 * 1000);
           dateStr = jsDate.toISOString().split('T')[0];
+        } else if (typeof rowDate === 'string' && rowDate.includes('/')) {
+          // Parse dd/mm/yyyy
+          const parts = rowDate.split('/');
+          if (parts.length === 3) {
+             const isoString = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+             const d = new Date(isoString);
+             if (isNaN(d.getTime())) {
+               errors.push(`Row ${rowNum}: Date '${rowDate}' is invalid.`);
+             } else {
+               dateStr = d.toISOString().split('T')[0];
+             }
+          } else {
+             errors.push(`Row ${rowNum}: Date '${rowDate}' is not in dd/mm/yyyy format.`);
+          }
         } else {
           const d = new Date(rowDate);
           if (isNaN(d.getTime())) {
@@ -209,6 +228,12 @@ export async function previewRoster(req, res) {
         const blocksForBranch = validBranchLocations[branchLower];
         if (!blocksForBranch || !blocksForBranch.has(rowBlock.toLowerCase())) {
           errors.push(`Row ${rowNum}: Block Name '${rowBlock}' is invalid for branch '${branch}'.`);
+        } else if (req.user.role === 'normal_admin') {
+          // Verify they have access to this specific block
+          const hasBlockAccess = await userRepository.hasLocationAccess(req.user.id, branch, rowBlock);
+          if (!hasBlockAccess) {
+             errors.push(`Row ${rowNum}: You do not have permission to upload rosters for block '${rowBlock}'.`);
+          }
         }
       }
 
@@ -226,15 +251,35 @@ export async function previewRoster(req, res) {
       let employeeId = '';
       if (!rowDocName) {
         errors.push(`Row ${rowNum}: Doctor Name is empty.`);
-      } else if (deptId) {
-        const key = `${rowDocName.toLowerCase()}_${deptId}`;
-        const matchedDoc = doctorLookup[key];
-        if (!matchedDoc) {
-          // We intentionally DO NOT throw an error for missing doctor, as per requirements: 
-          // "if does not then doctor name should not display in roaster". We just leave doctorId null.
-        } else {
-          employeeId = matchedDoc.employee_id;
-          doctorId = matchedDoc.id;
+      } else {
+        const docNameLower = rowDocName.toLowerCase();
+        
+        // 1. Validate against DB configuration
+        const expectedBlock = docBranchBlockMap[docNameLower];
+        if (expectedBlock && rowBlock && rowBlock.toLowerCase() !== expectedBlock) {
+           errors.push(`Row ${rowNum}: Doctor '${rowDocName}' is assigned to block '${expectedBlock}' in this branch, but Excel says '${rowBlock}'.`);
+        }
+
+        // 2. Validate against other rows in the Excel sheet
+        if (rowBlock) {
+           const trackedBlock = excelDocBlockTracker[docNameLower];
+           if (trackedBlock && trackedBlock !== rowBlock.toLowerCase()) {
+              errors.push(`Row ${rowNum}: Doctor '${rowDocName}' is scheduled in multiple blocks ('${trackedBlock}' and '${rowBlock}') within the same Excel sheet.`);
+           } else {
+              excelDocBlockTracker[docNameLower] = rowBlock.toLowerCase();
+           }
+        }
+
+        if (deptId) {
+          const key = `${docNameLower}_${deptId}`;
+          const matchedDoc = doctorLookup[key];
+          if (!matchedDoc) {
+            // We intentionally DO NOT throw an error for missing doctor, as per requirements: 
+            // "if does not then doctor name should not display in roaster". We just leave doctorId null.
+          } else {
+            employeeId = matchedDoc.employee_id;
+            doctorId = matchedDoc.id;
+          }
         }
       }
 
@@ -264,7 +309,7 @@ export async function previewRoster(req, res) {
         branch_id: branchId,
         location_id: locationId
       });
-    });
+    }
 
     if (errors.length > 0) {
       return res.status(400).json({ errors });
@@ -355,6 +400,7 @@ export async function importRoster(req, res) {
     }
 
     await rosterRepository.importRoster(validEntries);
+    notifyUpdate();
     return res.status(200).json({ message: "Roster imported successfully." });
   } catch (error) {
     console.error('Import roster error:', error);
@@ -369,16 +415,20 @@ export async function getTodayRoster(req, res) {
     return res.status(400).json({ message: 'Branch is required.' });
   }
 
+  let userId = null;
   if (req.user && req.user.role === 'normal_admin') {
-    const hasAccess = await userRepository.hasBranchAccess(req.user.id, branch);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'You do not have access to this branch.' });
+    userId = req.user.id;
+    if (location) {
+      const hasAccess = await userRepository.hasLocationAccess(req.user.id, branch, location);
+      if (!hasAccess) {
+        return res.status(403).json({ message: 'You do not have access to this block.' });
+      }
     }
   }
 
   try {
     const resolvedLoc = await resolveLocation(branch, location);
-    const roster = await rosterRepository.findTodayRoster({ branch, location: resolvedLoc || null });
+    const roster = await rosterRepository.findTodayRoster({ branch, location: resolvedLoc || null, userId });
     return res.status(200).json(roster.map((r) => r.toPublic()));
   } catch (error) {
     console.error('Get today roster error:', error);
@@ -393,16 +443,20 @@ export async function getRosterByDate(req, res) {
     return res.status(400).json({ message: 'Branch and date are required.' });
   }
 
+  let userId = null;
   if (req.user && req.user.role === 'normal_admin') {
-    const hasAccess = await userRepository.hasBranchAccess(req.user.id, branch);
-    if (!hasAccess) {
-      return res.status(403).json({ message: 'You do not have access to this branch.' });
+    userId = req.user.id;
+    if (location) {
+      const hasAccess = await userRepository.hasLocationAccess(req.user.id, branch, location);
+      if (!hasAccess) {
+        return res.status(403).json({ message: 'You do not have access to this block.' });
+      }
     }
   }
 
   try {
     const resolvedLoc = await resolveLocation(branch, location);
-    const roster = await rosterRepository.findRosterByDate({ branch, location: resolvedLoc || null, date });
+    const roster = await rosterRepository.findRosterByDate({ branch, location: resolvedLoc || null, date, userId });
     return res.status(200).json(roster.map((r) => r.toPublic()));
   } catch (error) {
     console.error('Get roster by date error:', error);
@@ -424,9 +478,14 @@ export async function addManualRoster(req, res) {
     }
 
     if (req.user && req.user.role === 'normal_admin') {
-      const hasAccess = await userRepository.hasBranchAccess(req.user.id, branch);
-      if (!hasAccess) {
-        return res.status(403).json({ message: 'You do not have permission for this branch.' });
+      const assignment = doctor.assignments.find(a => a.branch_name && a.branch_name.toLowerCase() === branch.toLowerCase());
+      if (assignment) {
+        const hasAccess = await userRepository.hasLocationAccess(req.user.id, branch, assignment.location_name);
+        if (!hasAccess) {
+          return res.status(403).json({ message: 'You do not have permission for this block.' });
+        }
+      } else {
+        return res.status(403).json({ message: 'Doctor is not assigned to this branch.' });
       }
     }
 
@@ -443,6 +502,7 @@ export async function addManualRoster(req, res) {
       location_id: assignment.location_id
     });
 
+    notifyUpdate();
     return res.status(201).json({ message: 'Manual roster entry added successfully.' });
   } catch (error) {
     console.error('Add manual roster error:', error);
@@ -457,6 +517,7 @@ export async function deleteManualRoster(req, res) {
     // In a real app, we should probably check if the user owns the branch of this roster entry,
     // but for simplicity and since it's an admin panel, we'll allow it if they have Duty Roster delete perm.
     await rosterRepository.deleteManualEntry(id);
+    notifyUpdate();
     return res.status(200).json({ message: 'Manual roster entry deleted.' });
   } catch (error) {
     console.error('Delete manual roster error:', error);

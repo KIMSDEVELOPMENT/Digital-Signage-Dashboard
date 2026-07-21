@@ -259,6 +259,7 @@ const Roster = () => {
               ))}
             </select>
           </div>
+
           <div className="space-y-1.5 flex-1 w-full max-w-[200px]">
             <label className="text-xs font-semibold text-slate-300 block">DATE</label>
             <input
@@ -290,7 +291,7 @@ const Roster = () => {
                 <h3 className="font-heading font-semibold text-white">Upload Spreadsheet</h3>
               </div>
 
-              {hasPermission('Duty Roster', 'create') ? (
+              {hasPermission('Duty Roster', 'read') ? (
                   <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-800 hover:border-emerald-500/50 rounded-2xl bg-slate-950/40 cursor-pointer group transition-all duration-200">
                     <UploadCloud className="w-10 h-10 text-slate-500 group-hover:text-emerald-400 transition-colors mb-3" />
                     <p className="text-sm font-semibold text-slate-300 text-center">
@@ -349,7 +350,7 @@ const Roster = () => {
               </div>
 
               {/* Manual Entry Form */}
-              {hasPermission('Duty Roster', 'update') && (
+              {hasPermission('Duty Roster', 'read') && (
                 <form onSubmit={handleAddManualEntry} className="flex flex-col sm:flex-row items-end gap-3 bg-slate-900/40 p-4 rounded-xl border border-slate-800">
                   {user?.role === 'super_admin' && (
                     <div className="w-full sm:w-32 md:w-40 space-y-1.5 shrink-0">
@@ -435,7 +436,7 @@ const Roster = () => {
                         <th className="px-4 py-3">Employee ID</th>
                         <th className="px-4 py-3">Department</th>
                         <th className="px-4 py-3">Shift Timing</th>
-                        {hasPermission('Duty Roster', 'delete') && <th className="px-4 py-3 text-right">Actions</th>}
+                        {hasPermission('Duty Roster', 'read') && <th className="px-4 py-3 text-right">Actions</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-850/30">
@@ -445,7 +446,7 @@ const Roster = () => {
                           <td className="px-4 py-3 font-mono text-slate-400">{item.employee_id}</td>
                           <td className="px-4 py-3 text-slate-300">{item.department_name}</td>
                           <td className="px-4 py-3 font-medium text-emerald-400">{item.timing}</td>
-                          {hasPermission('Duty Roster', 'delete') && (
+                          {hasPermission('Duty Roster', 'read') && (
                             <td className="px-4 py-3 text-right">
                               <button
                                 onClick={() => handleDeleteManualEntry(item.roster_id)}

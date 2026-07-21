@@ -5,7 +5,7 @@ import { checkModulePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
-router.get('/', authenticateToken, checkModulePermission('Department', 'read'), getDepartments);
+router.get('/', authenticateToken, getDepartments);
 router.post('/', authenticateToken, checkModulePermission('Department', 'create'), createDepartment);
 router.put('/:id', authenticateToken, checkModulePermission('Department', 'update'), updateDepartment);
 router.delete('/:id', authenticateToken, checkModulePermission('Department', 'delete'), deleteDepartment);

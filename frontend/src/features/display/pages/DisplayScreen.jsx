@@ -82,48 +82,125 @@ const DisplayScreen = () => {
     const fetchPlaylist = async () => {
       try {
         setLoading(true);
-        const res = await api.get(`/display/${formatLocationForUrl(branch)}/${formatLocationForUrl(location)}`);
+        
+        const buildPages = (fetchedPlaylist, locLabel) => {
+          const pages = [];
+          if (fetchedPlaylist && fetchedPlaylist.steps) {
+            fetchedPlaylist.steps.forEach(step => {
+              if (step.departments && step.departments.length > 0) {
+                step.departments.forEach(dept => {
+                  const doctors = dept.doctors || [];
+                  for (let i = 0; i < doctors.length; i += 3) {
+                    pages.push({
+                      stepTitle: step.title,
+                      duration: step.duration || 10,
+                      department: dept.name,
+                      doctors: doctors.slice(i, i + 3),
+                      locLabel
+                    });
+                  }
+                });
+              }
+            });
+          }
+          return pages;
+        };
 
-        const fetchedPlaylist = res.data;
-        setPlaylist(fetchedPlaylist);
+        if (branch.toLowerCase() === 'sscc') {
+          // Fetch both
+          const [resKss, resKcc] = await Promise.all([
+             api.get('/display/sscc/kss').catch(() => ({ data: null })),
+             api.get('/display/sscc/kcc').catch(() => ({ data: null }))
+          ]);
+          
+          const kssPlaylist = resKss.data || { branch: 'SSCC', steps: [] };
+          const kccPlaylist = resKcc.data || { branch: 'SSCC', steps: [] };
+          
+          setPlaylist(kssPlaylist.branch ? kssPlaylist : kccPlaylist);
 
-        // Transform steps into chunked pages
-        const allPages = [];
-        if (fetchedPlaylist && fetchedPlaylist.steps) {
-          fetchedPlaylist.steps.forEach(step => {
-            if (!step.departments || step.departments.length === 0) {
-              allPages.push({
-                stepTitle: step.title,
-                duration: step.duration || 10,
-                department: null,
-                doctors: []
-              });
-            } else {
-              step.departments.forEach(dept => {
-                const doctors = dept.doctors || [];
-                for (let i = 0; i < doctors.length; i += 3) {
-                  const chunk = doctors.slice(i, i + 3);
-                  allPages.push({
-                    stepTitle: step.title,
-                    duration: step.duration || 10,
-                    department: dept.name,
-                    doctors: chunk
-                  });
-                }
-              });
-            }
+          let allPages = [];
+
+          // Phase 1: Combined KSS + KCC (grouped by department)
+          const combinedDepts = {};
+          const processForCombined = (playlist) => {
+            if (!playlist || !playlist.steps) return;
+            playlist.steps.forEach(step => {
+              if (step.departments) {
+                step.departments.forEach(dept => {
+                  if (!combinedDepts[dept.name]) combinedDepts[dept.name] = [];
+                  combinedDepts[dept.name].push(...(dept.doctors || []));
+                });
+              }
+            });
+          };
+
+          processForCombined(kssPlaylist);
+          processForCombined(kccPlaylist);
+
+          Object.keys(combinedDepts).sort().forEach(deptName => {
+             const doctors = combinedDepts[deptName];
+             for (let i = 0; i < doctors.length; i += 3) {
+               allPages.push({
+                  stepTitle: 'OPD SCHEDULED',
+                  duration: 10,
+                  department: deptName,
+                  doctors: doctors.slice(i, i + 3),
+                  locLabel: 'combined'
+               });
+             }
           });
+
+          // Phase 2: KSS Alone + Banner
+          const kssPages = buildPages(kssPlaylist, 'kss');
+          allPages.push(...kssPages);
+          if (kssPages.length > 0 || allPages.length > 0) {
+             allPages.push({ isBanner: true, duration: 10, bannerType: 'kss' });
+             if (kssPlaylist.video) {
+               allPages.push({ isVideo: true, duration: kssPlaylist.video.duration, videoUrl: kssPlaylist.video.url });
+             }
+          }
+
+          // Phase 3: KCC Alone + Banner
+          const kccPages = buildPages(kccPlaylist, 'kcc');
+          allPages.push(...kccPages);
+          if (kccPages.length > 0 || allPages.length > 0) {
+             allPages.push({ isBanner: true, duration: 10, bannerType: 'kcc' });
+             if (kccPlaylist.video) {
+               allPages.push({ isVideo: true, duration: kccPlaylist.video.duration, videoUrl: kccPlaylist.video.url });
+             }
+          }
+
+          if (allPages.length === 0) {
+             allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
+             allPages.push({ isBanner: true, duration: 10 });
+             if (kssPlaylist.video || kccPlaylist.video) {
+               const vid = kssPlaylist.video || kccPlaylist.video;
+               allPages.push({ isVideo: true, duration: vid.duration, videoUrl: vid.url });
+             }
+          }
+
+          setPages(allPages);
+          setCurrentPageIndex(0);
+          setError(null);
+        } else {
+          // Normal logic for other branches
+          const res = await api.get(`/display/${formatLocationForUrl(branch)}/${formatLocationForUrl(location)}`);
+          const fetchedPlaylist = res.data;
+          setPlaylist(fetchedPlaylist);
+
+          const allPages = buildPages(fetchedPlaylist, null);
+          if (allPages.length === 0) {
+            allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
+          }
+          allPages.push({ isBanner: true, duration: 10 });
+          if (fetchedPlaylist.video) {
+            allPages.push({ isVideo: true, duration: fetchedPlaylist.video.duration, videoUrl: fetchedPlaylist.video.url });
+          }
+
+          setPages(allPages);
+          setCurrentPageIndex(0);
+          setError(null);
         }
-
-        if (allPages.length === 0) {
-          allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
-        }
-
-        allPages.push({ isBanner: true, duration: 10 });
-
-        setPages(allPages);
-        setCurrentPageIndex(0);
-        setError(null);
       } catch (err) {
         console.error('Error fetching display playlist:', err);
         setError('Unable to load display configuration.');
@@ -133,8 +210,25 @@ const DisplayScreen = () => {
     };
 
     fetchPlaylist();
-    const pollTimer = setInterval(fetchPlaylist, 300000); // 5 minutes
-    return () => clearInterval(pollTimer);
+    
+    // Set up Server-Sent Events (SSE) for real-time updates
+    const eventSource = new EventSource('http://localhost:5000/api/display/stream');
+    
+    eventSource.onmessage = (event) => {
+      if (event.data === 'update') {
+        console.log('Real-time update received, refreshing playlist...');
+        fetchPlaylist();
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('SSE Error:', error);
+      // EventSource will automatically attempt to reconnect
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [branch, location]);
 
   useEffect(() => {
@@ -209,7 +303,7 @@ const DisplayScreen = () => {
   return (
     <div className="h-screen w-screen flex flex-col font-sans text-slate-900 overflow-hidden relative bg-white">
       {/* Background Image fills the screen */}
-      {(!currentPage || !currentPage.isBanner) && (
+      {(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) && (
         <div
           className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: `url(${bgImg})` }}
@@ -218,7 +312,7 @@ const DisplayScreen = () => {
 
 
       {/* Header - Transparent background to show bg-image behind it */}
-      {(!currentPage || !currentPage.isBanner) && (
+      {(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) && (
         <header className="flex items-center justify-between px-10 py-6 z-10 shrink-0 min-h-[160px]">
 
           {/* Left Spacer for perfect center alignment */}
@@ -237,22 +331,31 @@ const DisplayScreen = () => {
 
           {/* Right Side: Date & Time */}
           <div className="w-1/4 text-right flex flex-col items-end text-[#1c4587] justify-center">
-            <p className="text-2xl font-medium whitespace-nowrap" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{dateString}</p>
+            <p className="text-3xl font-medium whitespace-nowrap" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{dateString}</p>
             <p className="text-7xl font-bold mt-1 tracking-tight" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{timeString}</p>
           </div>
         </header>
       )}
 
       {/* Title Bar */}
-      {(!currentPage || !currentPage.isBanner) && (
-        <div className="w-full bg-[#3478c9] text-white text-center py-2 z-10 shadow-md shrink-0">
-          <h2 className="text-3xl font-bold tracking-widest uppercase">OPD SCHEDULED</h2>
+      {(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) && (
+        <div className="w-full bg-gradient-to-r from-transparent via-[#4281b8] to-transparent text-white text-center py-2 z-10 shrink-0 opacity-95">
+          <h2 className="text-[2.2rem] font-bold tracking-widest uppercase" style={{ fontFamily: '"Times New Roman", Times, serif', textShadow: '1px 1px 3px rgba(0,0,0,0.3)' }}>OPD SCHEDULED</h2>
         </div>
       )}
 
       {/* Main Content Area */}
-      <main className={`flex-1 flex flex-col z-10 overflow-hidden min-h-0 ${(!currentPage || !currentPage.isBanner) ? 'px-12 py-6' : ''}`}>
-        {currentPage && currentPage.isBanner ? (
+      <main className={`flex-1 flex flex-col z-10 overflow-hidden min-h-0 ${(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) ? 'px-12 py-6' : ''}`}>
+        {currentPage && currentPage.isVideo ? (
+          <div className="flex-1 flex items-center justify-center overflow-hidden bg-black h-full w-full">
+            <video
+              src={getFullPhotoUrl(currentPage.videoUrl)}
+              className="w-full h-full object-contain"
+              autoPlay
+              muted
+            />
+          </div>
+        ) : currentPage && currentPage.isBanner ? (
           <AnimatePresence mode="wait">
             <motion.div
               key="banner-page"
@@ -277,10 +380,12 @@ const DisplayScreen = () => {
                 className="flex-1 flex flex-col"
               >
                 {/* Department Header (e.g. • NEUROLOGY •) */}
-                <div className="text-center mb-6">
-                  <h3 className="text-[2.5rem] font-bold text-[#1c4587] tracking-[0.3em] uppercase" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
-                    {currentPage.department}
+                <div className="text-center mb-6 w-full max-w-4xl mx-auto flex flex-col items-center">
+                  <div className="w-full border-t-[1.5px] border-[#1c4587]/30 mb-2"></div>
+                  <h3 className="text-[2.5rem] font-bold text-[#1c4587] tracking-widest uppercase" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+                    • {currentPage.department} •
                   </h3>
+                  <div className="w-full border-t-[1.5px] border-[#1c4587]/30 mt-2"></div>
                 </div>
 
                 {/* List of Doctors */}
@@ -306,7 +411,7 @@ const DisplayScreen = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 text-[#103061] px-6 py-2 rounded-lg bg-transparent font-bold text-2xl">
+                      <div className="flex items-center gap-3 text-[#103061] px-6 py-2 rounded-lg bg-transparent font-bold text-2xl" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
                         <Clock className="w-6 h-6 opacity-70" />
                         {doc.timing}
                       </div>
@@ -318,10 +423,9 @@ const DisplayScreen = () => {
               </motion.div>
             </AnimatePresence>
 
-            {/* Disclaimer */}
-            <div className="text-center mt-auto pt-6 text-[#627a94] text-xs pb-4">
-              <span className="inline-flex items-center justify-center w-3 h-3 border border-[#627a94] rounded-full mr-1 text-[8px]">i</span>
-              Consultation timings are subject to change.
+            {/* Copyright */}
+            <div className="text-center mt-auto pt-6 text-[#627a94] text-sm pb-4 font-medium tracking-wide">
+              © 2026 KIMS ICT. All Rights Reserved.
             </div>
           </div>
         ) : (
@@ -334,7 +438,7 @@ const DisplayScreen = () => {
       </main>
 
       {/* Footer */}
-      {(!currentPage || !currentPage.isBanner) && (
+      {(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) && (
         <footer className="bg-[#5993df] text-white py-5 shrink-0 shadow-[0_-4px_15px_rgba(0,0,0,0.1)] z-10 overflow-hidden flex items-center">
           <div className="flex items-center w-max animate-marquee text-2xl font-bold tracking-wide whitespace-nowrap">
             <FooterContent />

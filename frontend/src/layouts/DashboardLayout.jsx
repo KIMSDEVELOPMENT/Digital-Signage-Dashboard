@@ -14,7 +14,8 @@ import {
   X,
   User,
   Settings,
-  Layers
+  Layers,
+  Video
 } from 'lucide-react';
 import logoImg from '../common/assets/kims-logo.png';
 
@@ -43,6 +44,12 @@ const DashboardLayout = () => {
       icon: CalendarDays,
       visible: hasPermission('Duty Roster', 'read'),
     },
+    {
+      name: 'Video Management',
+      path: '/videos',
+      icon: Video,
+      visible: true,
+    },
   ];
 
   // Super Admin only menu items
@@ -63,7 +70,7 @@ const DashboardLayout = () => {
       name: 'Department Master',
       path: '/departments',
       icon: Layers,
-      visible: hasPermission('Department', 'read'),
+      visible: user?.role === 'super_admin',
     },
     {
       name: 'Admin Users',
@@ -83,7 +90,7 @@ const DashboardLayout = () => {
   const filteredAdminItems = adminMenuItems.filter(item => item.visible);
 
   // Display screen link for users with that permission
-  const showDisplayScreen = hasPermission('Display Screen', 'read');
+  const showDisplayScreen = user?.role === 'super_admin';
 
   // Build a summary label for the user
   const getUserLabel = () => {

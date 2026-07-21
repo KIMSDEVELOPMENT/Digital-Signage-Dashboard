@@ -5,7 +5,7 @@ import { Roster } from '../models/Roster.js';
  * RosterRepository - encapsulates all SQL queries for the roster table.
  */
 export class RosterRepository {
-  async findRosterByDate({ branch, location = null, date }) {
+  async findRosterByDate({ branch, location = null, date, userId = null }) {
     const pool = getPool();
 
     let query = `
@@ -30,6 +30,10 @@ export class RosterRepository {
     if (location) {
       query += ' AND l.name = ?';
       params.push(location);
+    } else if (userId) {
+      // If no specific location requested, but we have a userId, restrict to their assigned locations
+      query += ' AND r.location_id IN (SELECT location_id FROM user_locations WHERE user_id = ?)';
+      params.push(userId);
     }
 
     query += ' ORDER BY d.name ASC';
@@ -37,9 +41,9 @@ export class RosterRepository {
     return rows.map((r) => new Roster(r));
   }
 
-  async findTodayRoster({ branch, location = null }) {
+  async findTodayRoster({ branch, location = null, userId = null }) {
     const today = new Date().toISOString().split('T')[0];
-    return this.findRosterByDate({ branch, location, date: today });
+    return this.findRosterByDate({ branch, location, date: today, userId });
   }
 
   async addManualEntry({ date, doctor_id, timing, branch_id, location_id }) {

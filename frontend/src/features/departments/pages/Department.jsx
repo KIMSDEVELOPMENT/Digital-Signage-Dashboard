@@ -491,15 +491,6 @@ const Department = () => {
                                 <Edit2 className="w-4 h-4" />
                               </button>
                             )}
-                            {canDelete && (
-                              <button
-                                onClick={() => handleDeleteDepartment(dept.id, dept.name)}
-                                className="p-2 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 transition-all cursor-pointer"
-                                title="Delete Department"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
                           </td>
                         </tr>
                       ))

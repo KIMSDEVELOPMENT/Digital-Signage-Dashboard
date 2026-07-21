@@ -69,15 +69,15 @@ const Login = () => {
             
             {/* Username Input */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 tracking-wider">USERNAME</label>
+              <label className="text-xs font-semibold text-slate-300 tracking-wider">EMPLOYEE ID</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                   <User className="w-4 h-4" />
                 </span>
                 <input
                   type="text"
-                  placeholder="Enter username"
-                  {...register('username', { required: 'Username is required' })}
+                  placeholder="Enter employee ID"
+                  {...register('username', { required: 'Employee ID is required' })}
                   className={`
                     w-full pl-10 pr-4 py-3 rounded-xl text-sm transition-all bg-slate-900/80 border text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2
                     ${errors.username 

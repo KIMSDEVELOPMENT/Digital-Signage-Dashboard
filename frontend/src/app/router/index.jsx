@@ -13,6 +13,7 @@ const Location = lazy(() => import('../../features/locations/pages/Location'));
 const Admins = lazy(() => import('../../features/settings/pages/Admins'));
 const AdminConfig = lazy(() => import('../../features/settings/pages/AdminConfig'));
 const Roster = lazy(() => import('../../features/doctors/pages/Roster'));
+const VideoManagement = lazy(() => import('../../features/videos/pages/VideoManagement'));
 const DisplayScreen = lazy(() => import('../../features/display/pages/DisplayScreen'));
 const Error404 = lazy(() => import('../../features/error/Error404'));
 
@@ -48,6 +49,12 @@ const AppRoutes = () => {
             <Route element={<ModuleRoute moduleName="Duty Roster" />}>
               <Route path="/roster" element={<Roster />} />
             </Route>
+
+            <Route path="/videos" element={
+              <Suspense fallback={<PageLoader />}>
+                <VideoManagement />
+              </Suspense>
+            } />
             <Route element={<ModuleRoute moduleName="Department" />}>
               <Route path="/departments" element={<Department />} />
             </Route>

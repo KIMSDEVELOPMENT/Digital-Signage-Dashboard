@@ -126,6 +126,18 @@ export class UserRepository {
     return rows.length > 0;
   }
 
+  async hasLocationAccess(userId, branch, location) {
+    const pool = getPool();
+    let query = `
+      SELECT ul.id FROM user_locations ul
+      JOIN locations l ON ul.location_id = l.id
+      JOIN branches b ON l.branch_id = b.id
+      WHERE ul.user_id = ? AND b.name = ? AND l.name = ?
+    `;
+    const [rows] = await pool.query(query, [userId, branch, location]);
+    return rows.length > 0;
+  }
+
   // ─── Locations ─────────────────────────────────────────────────────────────
 
   async getUserLocations(userId) {

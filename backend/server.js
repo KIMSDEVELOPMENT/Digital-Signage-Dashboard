@@ -16,6 +16,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import rosterRoutes from './routes/rosterRoutes.js';
 import configRoutes from './routes/configRoutes.js';
 import displayRoutes from './routes/displayRoutes.js';
+import videoRoutes from './routes/videoRoutes.js';
 
 dotenv.config();
 
@@ -47,6 +48,7 @@ app.use('/api/admins', adminRoutes);
 app.use('/api/roster', rosterRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/display', displayRoutes);
+app.use('/api/videos', videoRoutes);
 
 // Root route
 app.get('/', (req, res) => {
@@ -73,3 +75,5 @@ app.use((err, req, res, next) => {
     process.exit(1);
   }
 })();
+ 
+ 

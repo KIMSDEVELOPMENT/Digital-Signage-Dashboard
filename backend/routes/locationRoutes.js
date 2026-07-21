@@ -9,13 +9,14 @@ import {
 
 const router = express.Router();
 
-// Only super admin can manage locations
 router.use(authenticateToken);
-router.use(authorizeRoles('super_admin'));
 
+// Anyone authenticated can read locations
 router.get('/', getLocations);
-router.post('/', createLocation);
-router.put('/:id', updateLocation);
-router.delete('/:id', deleteLocation);
+
+// Only super admin can create, update, delete
+router.post('/', authorizeRoles('super_admin'), createLocation);
+router.put('/:id', authorizeRoles('super_admin'), updateLocation);
+router.delete('/:id', authorizeRoles('super_admin'), deleteLocation);
 
 export default router;

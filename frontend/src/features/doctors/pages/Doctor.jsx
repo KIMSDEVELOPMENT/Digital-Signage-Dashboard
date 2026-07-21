@@ -179,6 +179,28 @@ const Doctor = () => {
     }
   };
 
+  const handleBulkUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const loadToast = toast.loading('Uploading bulk doctors...');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const res = await api.post('/doctors/upload-bulk', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      
+      toast.success(res.data.message || 'Bulk upload successful!', { id: loadToast });
+      fetchDoctors(search);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error during bulk upload.', { id: loadToast });
+    } finally {
+      e.target.value = ''; // Reset input
+    }
+  };
+
   const resetForm = () => {
     setFormData({ employee_id: '', name: '', designation: '', status: true, assignments: [] });
     setPhotoFile(null);
@@ -209,13 +231,13 @@ const Doctor = () => {
     }
 
     name = name.trim();
-    if (!/^Dr\.\s/i.test(name)) {
-      if (/^Dr/i.test(name)) {
-        name = name.replace(/^Dr\.?\s*/i, 'Dr. ');
-      } else {
-        name = 'Dr. ' + name;
-      }
+    if (!name) {
+      toast.error('Doctor name is required.');
+      return;
     }
+    
+    // Always ensure it gets sent to the server exactly as 'Dr. {name}'
+    name = 'Dr. ' + name.replace(/^Dr\.?\s*/i, '').trim();
 
     setSubmitting(true);
     const loadToast = toast.loading(editingDoctor ? 'Saving changes...' : 'Registering doctor...');
@@ -257,10 +279,9 @@ const Doctor = () => {
 
   const handleEdit = (doc) => {
     setEditingDoctor(doc);
-    
     setFormData({
       employee_id: doc.employee_id,
-      name: doc.name,
+      name: doc.name ? doc.name.replace(/^Dr\.?\s*/i, '').trim() : '',
       designation: doc.designation,
       status: !!doc.status,
       assignments: doc.assignments || [],
@@ -389,6 +410,22 @@ const Doctor = () => {
             </select>
           </div>
 
+          {user?.role === 'super_admin' && (
+            <div className="flex items-center gap-2 mr-2">
+              <a
+                href="http://localhost:5000/api/doctors/template"
+                download
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-sm transition-all border border-slate-700 cursor-pointer text-center"
+              >
+                Download Template
+              </a>
+              <label className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-sm transition-all shadow-blue-500/20 shadow-lg cursor-pointer flex items-center justify-center">
+                Bulk Upload
+                <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleBulkUpload} />
+              </label>
+            </div>
+          )}
+
           {canCreate && (
             <button
               onClick={() => {
@@ -507,11 +544,6 @@ const Doctor = () => {
                             <Edit2 className="w-4 h-4" />
                           </button>
                         )}
-                        {canDelete && (
-                          <button onClick={() => handleDeleteDoctor(doc.id, doc.name)} className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer" title="Delete Doctor">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -533,11 +565,10 @@ const Doctor = () => {
         {pagination && pagination.totalRecords > 0 && (
           <div className="p-4 border-t border-slate-800/60 bg-slate-900/20">
             <Pagination
-              currentPage={page}
-              totalPages={pagination.totalPages}
+              pagination={pagination}
               onPageChange={handlePageChange}
-              totalRecords={pagination.totalRecords}
-              limit={limit}
+              onLimitChange={handleLimitChange}
+              loading={loading}
             />
           </div>
         )}
@@ -580,7 +611,12 @@ const Doctor = () => {
             </div>
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Doctor Name</label>
-              <input type="text" placeholder="Dr. John Doe" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner" />
+              <div className="flex bg-[#070b14] border border-slate-800/80 rounded-xl focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 shadow-inner overflow-hidden transition-colors">
+                <span className="flex items-center justify-center px-4 bg-slate-800/50 border-r border-slate-800/80 text-slate-400 font-semibold text-sm select-none">
+                  Dr.
+                </span>
+                <input type="text" placeholder="John Doe" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="flex-1 px-3 py-3 text-sm bg-transparent border-none focus:outline-none text-white placeholder-slate-600" />
+              </div>
             </div>
           </div>
 
@@ -615,6 +651,13 @@ const Doctor = () => {
                   toast.error('This assignment is already added.');
                   return;
                 }
+
+                const existingBlockInBranch = formData.assignments.find(a => a.branch_id === bid && a.location_id !== lid);
+                if (existingBlockInBranch) {
+                  toast.error(`Doctor is already assigned to block ${existingBlockInBranch.location_name} in this branch. Cannot assign to multiple blocks in the same branch.`);
+                  return;
+                }
+
                 const branchName = branches.find(b => b.id === bid)?.name;
                 const locName = locations.find(l => l.id === lid)?.name;
                 const deptName = departments.find(d => d.id === did)?.name;

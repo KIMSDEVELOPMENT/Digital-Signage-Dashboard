@@ -27,7 +27,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response) {
       const { status } = error.response;
-      if (status === 401 || status === 403) {
+      if (status === 401) {
         // Clear auth and reload page or trigger logout event
         localStorage.removeItem('token');
         localStorage.removeItem('user');

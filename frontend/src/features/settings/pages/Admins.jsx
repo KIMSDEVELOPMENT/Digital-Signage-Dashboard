@@ -82,9 +82,9 @@ const Admins = () => {
 
   const handleCreateAdmin = async (e) => {
     e.preventDefault();
-    const { employee_id, full_name, username, password, default_branch, default_location } = formData;
+    const { employee_id, full_name, password, default_branch, default_location } = formData;
 
-    if (!employee_id || !full_name || !username || !password || !default_branch || !default_location) {
+    if (!employee_id || !full_name || !password || !default_branch || !default_location) {
       toast.error('All fields are required.');
       return;
     }
@@ -95,7 +95,7 @@ const Admins = () => {
       const res = await api.post('/admins', {
         employee_id,
         full_name,
-        username,
+        username: employee_id, // Map employee_id to username
         password,
         default_branch,
         default_location
@@ -211,10 +211,11 @@ const Admins = () => {
                             setSelectedAdmin(admin);
                             setIsResetOpen(true);
                           }}
-                          className="p-2 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/20 transition-all cursor-pointer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-400 hover:border-emerald-500/20 transition-all cursor-pointer"
                           title="Reset Password"
                         >
                           <Key className="w-4 h-4" />
+                          <span className="text-xs font-medium">Reset Password</span>
                         </button>
                         
                         {/* Delete Admin */}
@@ -249,7 +250,6 @@ const Admins = () => {
           setFormData({
             employee_id: '',
             full_name: '',
-            username: '',
             password: '',
             default_branch: '',
             default_location: '',
@@ -289,19 +289,6 @@ const Admins = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Username */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">ADMIN USERNAME *</label>
-              <input
-                type="text"
-                placeholder="e.g. johndoe"
-                value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-white placeholder-slate-650"
-              />
-            </div>
-
             {/* Password */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-300">PASSWORD *</label>
@@ -313,7 +300,6 @@ const Admins = () => {
                 className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10 focus:outline-none text-white placeholder-slate-650"
               />
             </div>
-          </div>
 
           <div className="grid grid-cols-2 gap-4">
             {/* Branch */}

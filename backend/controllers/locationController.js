@@ -1,4 +1,5 @@
 import { getPool } from '../config/db.js';
+import { notifyUpdate } from '../utils/sse.js';
 
 export const getLocations = async (req, res) => {
   try {
@@ -65,9 +66,11 @@ export const createLocation = async (req, res) => {
     }
 
     const [result] = await pool.query(
-      'INSERT INTO locations (branch_id, name, status) VALUES (?, ?, ?)',
+      `INSERT INTO locations (branch_id, name, status) VALUES (?, ?, ?)`,
       [branch_id, name.trim(), status !== undefined ? status : 1]
     );
+
+    notifyUpdate();
 
     res.status(201).json({ message: 'Location created successfully.', id: result.insertId });
   } catch (err) {
@@ -97,10 +100,11 @@ export const updateLocation = async (req, res) => {
     }
 
     await pool.query(
-      'UPDATE locations SET branch_id = ?, name = ?, status = ? WHERE id = ?',
+      `UPDATE locations SET branch_id = ?, name = ?, status = ? WHERE id = ?`,
       [branch_id, name.trim(), status !== undefined ? status : 1, id]
     );
 
+    notifyUpdate();
     res.json({ message: 'Location updated successfully.' });
   } catch (err) {
     console.error(err);
@@ -114,8 +118,9 @@ export const deleteLocation = async (req, res) => {
     const pool = getPool();
     
     // Soft delete by setting status = 0
-    await pool.query('UPDATE locations SET status = 0 WHERE id = ?', [id]);
+    await pool.query(`UPDATE locations SET status = 0 WHERE id = ?`, [id]);
     
+    notifyUpdate();
     res.json({ message: 'Location deactivated successfully.' });
   } catch (err) {
     console.error(err);

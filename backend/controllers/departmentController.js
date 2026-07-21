@@ -1,6 +1,7 @@
 import departmentRepository from '../repositories/DepartmentRepository.js';
 import branchRepository from '../repositories/BranchRepository.js';
 import locationRepository from '../repositories/LocationRepository.js';
+import { notifyUpdate } from '../utils/sse.js';
 
 export async function getDepartments(req, res) {
   try {
@@ -12,10 +13,7 @@ export async function getDepartments(req, res) {
 
     // If no pagination params provided, return full active list (backwards compatible)
     if (!page) {
-      const departments =
-        req.user.role === 'normal_admin'
-          ? await departmentRepository.findByUserId(req.user.id, parsedBranchId, parsedLocationId)
-          : await departmentRepository.findAll(parsedBranchId, parsedLocationId, parsedStatus);
+      const departments = await departmentRepository.findAll(parsedBranchId, parsedLocationId, parsedStatus);
 
       return res.status(200).json(departments.map((d) => d.toPublic()));
     }
@@ -33,8 +31,6 @@ export async function getDepartments(req, res) {
       status: parsedStatus,
       sortBy: sortBy || 'name',
       sortOrder: sortOrder || 'asc',
-      userId: req.user.id,
-      role: req.user.role,
     });
 
     const totalPages = Math.ceil(totalRecords / limitNum);
@@ -96,6 +92,8 @@ export async function createDepartment(req, res) {
       status: parsedStatus
     });
 
+    notifyUpdate();
+
     return res.status(201).json({
       id,
       name: name.trim(),
@@ -154,6 +152,8 @@ export async function updateDepartment(req, res) {
       status: parsedStatus
     });
 
+    notifyUpdate();
+
     return res.status(200).json({
       id,
       name: name.trim(),
@@ -187,6 +187,8 @@ export async function deleteDepartment(req, res) {
     if (affected === 0) {
       return res.status(404).json({ message: 'Department not found.' });
     }
+
+    notifyUpdate();
 
     return res.status(200).json({ message: 'Department deleted successfully.' });
   } catch (error) {

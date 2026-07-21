@@ -1,10 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import * as xlsx from 'xlsx';
 import doctorRepository from '../repositories/DoctorRepository.js';
 import departmentRepository from '../repositories/DepartmentRepository.js';
 import branchRepository from '../repositories/BranchRepository.js';
 import locationRepository from '../repositories/LocationRepository.js';
 import userRepository from '../repositories/UserRepository.js';
+import { notifyUpdate } from '../utils/sse.js';
 
 export async function getDoctors(req, res) {
   try {
@@ -14,21 +16,6 @@ export async function getDoctors(req, res) {
     const parsedLocationId = location_id ? parseInt(location_id, 10) : null;
 
     if (!page) {
-      if (req.user.role === 'normal_admin') {
-        const branches = await userRepository.getUserBranches(req.user.id);
-        const locations = await userRepository.getUserLocations(req.user.id);
-        const departmentIds = await userRepository.getUserDepartmentIds(req.user.id);
-
-        const doctors = await doctorRepository.findWithFilters({
-          branches,
-          locations,
-          departmentIds,
-          search: search || null,
-        });
-
-        return res.status(200).json(doctors.map((d) => d.toPublic()));
-      }
-
       const doctors = await doctorRepository.findWithFilters({
         branches: branch ? [branch] : (parsedBranchId ? [parsedBranchId] : null),
         locations: null,
@@ -49,16 +36,6 @@ export async function getDoctors(req, res) {
       sortBy: sortBy || 'name',
       sortOrder: sortOrder || 'asc',
     };
-
-    if (req.user.role === 'normal_admin') {
-      const userBranches = await userRepository.getUserBranches(req.user.id);
-      const userLocations = await userRepository.getUserLocations(req.user.id);
-      const userDepartmentIds = await userRepository.getUserDepartmentIds(req.user.id);
-
-      paginationParams.branches = userBranches;
-      paginationParams.locations = userLocations;
-      paginationParams.departmentIds = userDepartmentIds;
-    }
 
     if (branch) paginationParams.branchId = branch;
     if (parsedBranchId) paginationParams.branchId = parsedBranchId;
@@ -104,6 +81,16 @@ export async function createDoctor(req, res) {
     return res.status(400).json({ message: 'Employee ID, Name, Designation, and at least one assignment are required.' });
   }
 
+  // Validate: Single block per branch rule
+  const branchBlocks = {};
+  for (const assignment of parsedAssignments) {
+    if (branchBlocks[assignment.branch_id] && branchBlocks[assignment.branch_id] !== assignment.location_id) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'A doctor cannot be assigned to multiple blocks within the same branch.' });
+    }
+    branchBlocks[assignment.branch_id] = assignment.location_id;
+  }
+
   const photo_url = req.file ? `/uploads/${req.file.filename}` : null;
 
   try {
@@ -121,6 +108,8 @@ export async function createDoctor(req, res) {
     });
 
     await doctorRepository.syncAssignments(id, parsedAssignments);
+
+    notifyUpdate();
 
     return res.status(201).json({
       id,
@@ -156,6 +145,16 @@ export async function updateDoctor(req, res) {
     return res.status(400).json({ message: 'Employee ID, Name, Designation, and at least one assignment are required.' });
   }
 
+  // Validate: Single block per branch rule
+  const branchBlocks = {};
+  for (const assignment of parsedAssignments) {
+    if (branchBlocks[assignment.branch_id] && branchBlocks[assignment.branch_id] !== assignment.location_id) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'A doctor cannot be assigned to multiple blocks within the same branch.' });
+    }
+    branchBlocks[assignment.branch_id] = assignment.location_id;
+  }
+
   try {
     const existing = await doctorRepository.findById(id);
     if (!existing) {
@@ -171,8 +170,10 @@ export async function updateDoctor(req, res) {
 
     let photo_url = existing.photo_url;
     if (req.file) {
-      const oldPath = path.join(process.cwd(), existing.photo_url);
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      if (existing.photo_url) {
+        const oldPath = path.join(process.cwd(), existing.photo_url);
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      }
       photo_url = `/uploads/${req.file.filename}`;
     }
 
@@ -187,6 +188,8 @@ export async function updateDoctor(req, res) {
     });
 
     await doctorRepository.syncAssignments(id, parsedAssignments);
+
+    notifyUpdate();
 
     return res.status(200).json({
       id,
@@ -220,9 +223,167 @@ export async function deleteDoctor(req, res) {
       if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
     }
 
+    notifyUpdate();
+
     return res.status(200).json({ message: 'Doctor deleted successfully.' });
   } catch (error) {
     console.error('Delete doctor error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function downloadDoctorTemplate(req, res) {
+  try {
+    const wb = xlsx.utils.book_new();
+    const ws = xlsx.utils.aoa_to_sheet([
+      ['CLINICIAN', 'EMPLOYEE ID', 'TITLE / DESIGNATION', 'DEPARTMENTS', 'BRANCHES', 'LOCATIONS'],
+      ['Dr. John Doe', 'EMP001', 'Cardiologist', 'Cardiology', 'Main Hospital', 'Block A'],
+      ['Dr. Jane Smith', 'EMP002', 'Neurologist', 'Neurology', 'Main Hospital', 'Block B']
+    ]);
+    
+    // Auto-size columns slightly
+    const wscols = [
+      {wch: 25}, {wch: 15}, {wch: 25}, {wch: 20}, {wch: 20}, {wch: 20}
+    ];
+    ws['!cols'] = wscols;
+
+    xlsx.utils.book_append_sheet(wb, ws, "Template");
+    const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    
+    res.setHeader('Content-Disposition', 'attachment; filename="doctor_upload_template.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return res.send(buffer);
+  } catch (error) {
+    console.error('Download template error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function uploadBulkDoctors(req, res) {
+  try {
+    if (req.user.role !== 'super_admin') {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(403).json({ message: 'Only Super Admins can bulk upload.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded.' });
+    }
+
+    const workbook = xlsx.readFile(req.file.path);
+    const sheetName = workbook.SheetNames[0];
+    const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    // Cleanup file
+    fs.unlinkSync(req.file.path);
+
+    if (!data || data.length === 0) {
+      return res.status(400).json({ message: 'Empty Excel file.' });
+    }
+
+    // Group by Employee ID to gather all assignments
+    const doctorsMap = new Map();
+
+    // Cache to minimize DB queries
+    const branchCache = {}; // name -> id
+    const locCache = {}; // branchId_name -> id
+    const deptCache = {}; // name -> id
+
+    // Load existing masters to memory for quick mapping
+    const allBranches = await branchRepository.findAll();
+    allBranches.forEach(b => branchCache[b.name.toLowerCase()] = b.id);
+    
+    const allLocations = await locationRepository.findAll();
+    allLocations.forEach(l => locCache[`${l.branch_id}_${l.name.toLowerCase()}`] = l.id);
+
+    const allDepts = await departmentRepository.findAll();
+    allDepts.forEach(d => deptCache[d.name.toLowerCase()] = d.id);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const row of data) {
+      const name = row['CLINICIAN']?.toString().trim();
+      let empId = row['EMPLOYEE ID']?.toString().trim();
+      const designation = row['TITLE / DESIGNATION']?.toString().trim();
+      const departmentName = row['DEPARTMENTS']?.toString().trim();
+      const branchName = row['BRANCHES']?.toString().trim();
+      const locationName = row['LOCATIONS']?.toString().trim();
+
+      if (!name || !empId || !designation || !departmentName || !branchName || !locationName) {
+        errorCount++;
+        continue;
+      }
+
+      // Add Dr. prefix if missing
+      let formattedName = name;
+      if (!/^Dr\.\s/i.test(formattedName)) {
+        if (/^Dr/i.test(formattedName)) {
+          formattedName = formattedName.replace(/^Dr\.?\s*/i, 'Dr. ');
+        } else {
+          formattedName = 'Dr. ' + formattedName;
+        }
+      }
+
+      // Resolve IDs
+      const branchId = branchCache[branchName.toLowerCase()];
+      if (!branchId) { errorCount++; continue; }
+
+      const locId = locCache[`${branchId}_${locationName.toLowerCase()}`];
+      if (!locId) { errorCount++; continue; }
+
+      const deptId = deptCache[departmentName.toLowerCase()];
+      if (!deptId) { errorCount++; continue; }
+
+      if (!doctorsMap.has(empId)) {
+        doctorsMap.set(empId, {
+          employee_id: empId,
+          name: formattedName,
+          designation,
+          status: 1, // Default active
+          assignments: []
+        });
+      }
+
+      const doc = doctorsMap.get(empId);
+      // Avoid duplicate assignments for same doctor
+      const exists = doc.assignments.find(a => a.branch_id === branchId && a.location_id === locId && a.department_id === deptId);
+      if (!exists) {
+        doc.assignments.push({ branch_id: branchId, location_id: locId, department_id: deptId });
+      }
+    }
+
+    // Process grouped doctors
+    for (const [empId, docData] of doctorsMap.entries()) {
+      if (docData.assignments.length === 0) continue;
+      
+      // Check if exists
+      const existing = await doctorRepository.findByEmployeeId(empId);
+      if (existing) {
+        // Update existing, maintaining their photo if any
+        await doctorRepository.update(existing.id, {
+          employee_id: docData.employee_id,
+          name: docData.name,
+          designation: docData.designation,
+          status: docData.status,
+          photo_url: existing.photo_url,
+          assignments: docData.assignments
+        });
+      } else {
+        // Create new
+        await doctorRepository.create(docData);
+      }
+      successCount++;
+    }
+
+    notifyUpdate();
+
+    return res.status(200).json({ 
+      message: `Bulk upload completed. Processed ${successCount} doctors. Skipped/failed ${errorCount} rows due to missing/invalid master data.`
+    });
+  } catch (error) {
+    console.error('Bulk upload error:', error);
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     return res.status(500).json({ message: 'Internal server error.' });
   }
 }

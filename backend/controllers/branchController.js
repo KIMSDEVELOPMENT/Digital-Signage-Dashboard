@@ -1,4 +1,5 @@
 import branchRepository from '../repositories/BranchRepository.js';
+import { notifyUpdate } from '../utils/sse.js';
 
 export async function getBranches(req, res) {
   try {
@@ -71,6 +72,7 @@ export async function createBranch(req, res) {
 
     const parsedStatus = status !== undefined ? (status ? 1 : 0) : 1;
     const id = await branchRepository.create({ name: name.trim(), status: parsedStatus });
+    notifyUpdate();
     return res.status(201).json({ id, name: name.trim(), status: !!parsedStatus });
   } catch (error) {
     console.error('Create branch error:', error);
@@ -100,6 +102,7 @@ export async function updateBranch(req, res) {
 
     const parsedStatus = status !== undefined ? (status ? 1 : 0) : 1;
     await branchRepository.update(id, { name: name.trim(), status: parsedStatus });
+    notifyUpdate();
     return res.status(200).json({ id, name: name.trim(), status: !!parsedStatus });
   } catch (error) {
     console.error('Update branch error:', error);
@@ -123,6 +126,7 @@ export async function deleteBranch(req, res) {
     }
 
     await branchRepository.deleteById(id);
+    notifyUpdate();
     return res.status(200).json({ message: 'Branch deleted successfully.' });
   } catch (error) {
     console.error('Delete branch error:', error);
