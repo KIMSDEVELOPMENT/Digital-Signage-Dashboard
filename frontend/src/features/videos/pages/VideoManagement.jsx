@@ -4,7 +4,8 @@ import api from '../../../common/services/api';
 import { useAuth } from '../../../app/context/AuthContext';
 
 const VideoManagement = () => {
-  const { user, branches, assignedLocs, branchLocations } = useAuth();
+  const { user, branches, branchLocations, getAssignedLocations } = useAuth();
+  const assignedLocs = getAssignedLocations();
   
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);

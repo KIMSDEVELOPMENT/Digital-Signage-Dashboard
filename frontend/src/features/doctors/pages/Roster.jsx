@@ -11,6 +11,8 @@ import {
   RefreshCw, 
   MapPin,
   Trash2,
+  Edit2,
+  Save,
   Plus,
   Search
 } from 'lucide-react';
@@ -18,7 +20,8 @@ import { TableSkeleton } from '../../../common/components/Skeleton';
 import { toast } from 'react-hot-toast';
 
 const Roster = () => {
-  const { user, hasPermission, branches, branchLocations } = useAuth();
+  const { user, hasPermission, branches, branchLocations, getAssignedLocations } = useAuth();
+  const assignedLocs = getAssignedLocations();
   
   // Determine allowed branches & locations for dropdown selection
   const allowedBranches = user.role === 'super_admin' 
@@ -27,7 +30,13 @@ const Roster = () => {
 
   // Selection state
   const [selectedBranch, setSelectedBranch] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState('');
+  const [availableLocations, setAvailableLocations] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Edit State
+  const [editingRosterId, setEditingRosterId] = useState(null);
+  const [editTiming, setEditTiming] = useState('');
   
   // States
   const [file, setFile] = useState(null);
@@ -37,7 +46,7 @@ const Roster = () => {
   const [manualSearch, setManualSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
-  const [manualTiming, setManualTiming] = useState('');
+  const [manualTiming, setManualTiming] = useState('09:00 AM - 05:00 PM');
   const [isSearching, setIsSearching] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [loadingRoster, setLoadingRoster] = useState(false);
@@ -49,13 +58,27 @@ const Roster = () => {
   const [duplicateExists, setDuplicateExists] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  // Auto-select first branch & location on load
+  // Auto-assign branch and location for normal admins
   useEffect(() => {
-    if (allowedBranches.length > 0 && !selectedBranch) {
-      const defaultBranch = allowedBranches[0];
-      setSelectedBranch(defaultBranch);
+    if (user && user.role !== 'super_admin' && assignedLocs && assignedLocs.length > 0) {
+      setSelectedBranch(assignedLocs[0].branch);
+      setSelectedLocation(assignedLocs[0].location);
+    } else if (allowedBranches.length > 0 && !selectedBranch) {
+      setSelectedBranch(allowedBranches[0]);
     }
-  }, [allowedBranches, user]);
+  }, [allowedBranches, user, assignedLocs, selectedBranch]);
+
+  useEffect(() => {
+    if (user?.role === 'super_admin') {
+      if (selectedBranch) {
+        setAvailableLocations(branchLocations[selectedBranch] || []);
+        setSelectedLocation('');
+      } else {
+        setAvailableLocations([]);
+        setSelectedLocation('');
+      }
+    }
+  }, [selectedBranch, branchLocations, user]);
 
   const fetchRoster = async () => {
     if (!selectedBranch || !selectedDate) return;
@@ -63,7 +86,7 @@ const Roster = () => {
     try {
       setLoadingRoster(true);
       const res = await api.get(`/roster/date`, {
-        params: { branch: selectedBranch, date: selectedDate }
+        params: { branch: selectedBranch, location: selectedLocation, date: selectedDate }
       });
       setTodayRoster(res.data);
     } catch (err) {
@@ -76,7 +99,7 @@ const Roster = () => {
 
   useEffect(() => {
     fetchRoster();
-  }, [selectedBranch, selectedDate]);
+  }, [selectedBranch, selectedLocation, selectedDate]);
 
   useEffect(() => {
     // If selectedBranch changes and searchBranch is empty, sync it
@@ -92,8 +115,11 @@ const Roster = () => {
     const search = async () => {
       setIsSearching(true);
       try {
-        const res = await api.get('/doctors', { params: { search: manualSearch, branch: branchToSearch, status: 1 } });
-        setSearchResults(res.data.data || res.data); // Adjust based on pagination if any
+        const res = await api.get('/doctors', { params: { search: manualSearch, branch: branchToSearch, status: 1, location: selectedLocation } });
+        const results = res.data.data || res.data;
+        // Filter out doctors already in todayRoster
+        const filtered = results.filter(doc => !todayRoster.some(r => r.doctor_id === doc.id));
+        setSearchResults(filtered);
       } catch (err) {
         console.error(err);
       } finally {
@@ -102,7 +128,7 @@ const Roster = () => {
     };
     const timeoutId = setTimeout(search, 300);
     return () => clearTimeout(timeoutId);
-  }, [manualSearch, searchBranch, selectedBranch]);
+  }, [manualSearch, searchBranch, selectedBranch, selectedLocation, todayRoster]);
 
   const handleAddManualEntry = async (e) => {
     e.preventDefault();
@@ -125,6 +151,22 @@ const Roster = () => {
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.message || 'Failed to add manual entry.', { id: loadToast });
+    }
+  };
+
+
+  const handleUpdateTiming = async (id) => {
+    if (!editTiming) return;
+    const loadToast = toast.loading('Updating entry...');
+    try {
+      await api.put(`/roster/manual/${id}`, { timing: editTiming });
+      toast.success('Entry updated successfully.', { id: loadToast });
+      setEditingRosterId(null);
+      setEditTiming('');
+      fetchRoster();
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update entry.', { id: loadToast });
     }
   };
 
@@ -399,7 +441,14 @@ const Roster = () => {
                             className="px-4 py-2 hover:bg-slate-800 cursor-pointer border-b border-slate-800/50 last:border-0"
                           >
                             <p className="text-sm font-semibold text-white">{doc.name}</p>
-                            <p className="text-[10px] text-slate-400">{doc.department?.name || 'No Dept'} | {doc.employee_id}</p>
+                            {(() => {
+                                const assignment = doc.assignments?.find(a => 
+                                  a.branch_name === (searchBranch || selectedBranch) && 
+                                  (!selectedLocation || a.location_name === selectedLocation)
+                                );
+                                const deptName = assignment?.department_name || doc.assignments?.[0]?.department_name || 'No Dept';
+                                return <p className="text-[10px] text-slate-400">{deptName} | {doc.employee_id}</p>;
+                              })()}
                           </div>
                         ))}
                       </div>

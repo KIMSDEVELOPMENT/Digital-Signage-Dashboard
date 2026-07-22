@@ -64,3 +64,32 @@ export async function getMe(req, res) {
     return res.status(500).json({ message: 'Internal server error.' });
   }
 }
+
+export async function changePassword(req, res) {
+  const { currentPassword, newPassword } = req.body;
+  
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: 'Current and new passwords are required.' });
+  }
+
+  try {
+    const user = await userRepository.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword.trim(), user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Incorrect current password.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword.trim(), 10);
+    await userRepository.updatePassword(user.id, hashedPassword);
+
+    return res.status(200).json({ message: 'Password changed successfully.' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+

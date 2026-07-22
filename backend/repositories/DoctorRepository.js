@@ -45,6 +45,16 @@ export class DoctorRepository {
       params.push(...branches);
     }
 
+    if (locations !== null && locations.length > 0) {
+      const placeholders = locations.map(() => '?').join(',');
+      if (typeof locations[0] === 'number' || !isNaN(locations[0])) {
+        query += ` AND da.location_id IN (${placeholders})`;
+      } else {
+        query += ` AND l.name IN (${placeholders})`;
+      }
+      params.push(...locations);
+    }
+
     if (departmentIds !== null && departmentIds.length > 0) {
       query += ` AND da.department_id IN (${departmentIds.map(() => '?').join(',')})`;
       params.push(...departmentIds);

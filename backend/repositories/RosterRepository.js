@@ -62,6 +62,11 @@ export class RosterRepository {
     await pool.query('DELETE FROM roster WHERE id = ?', [id]);
   }
 
+  async updateManualEntry(id, timing) {
+    const pool = getPool();
+    await pool.query('UPDATE roster SET timing = ? WHERE id = ?', [timing, id]);
+  }
+
   async importRoster(entries) {
     const pool = getPool();
     const connection = await pool.getConnection();

@@ -15,14 +15,17 @@ import {
   User,
   Settings,
   Layers,
-  Video
+  Video,
+  Lock
 } from 'lucide-react';
 import logoImg from '../common/assets/kims-logo.png';
+import ChangePasswordModal from '../features/authentication/components/ChangePasswordModal';
 
 const DashboardLayout = () => {
   const { user, logout, hasPermission } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   // Build menu items dynamically based on permissions
   const menuItems = [
@@ -206,13 +209,22 @@ const DashboardLayout = () => {
             </div>
           </div>
 
-          <button
-            onClick={logout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-rose-500/20 bg-rose-500/5 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all font-medium text-sm cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-            Logout
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => setIsChangePasswordOpen(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-700/50 bg-slate-800/20 text-slate-300 hover:bg-slate-800/50 hover:text-white transition-all font-medium text-sm cursor-pointer"
+            >
+              <Lock className="w-4 h-4" />
+              Change Password
+            </button>
+            <button
+              onClick={logout}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-rose-500/20 bg-rose-500/5 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all font-medium text-sm cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -267,6 +279,11 @@ const DashboardLayout = () => {
         </main>
         <BottomFooter />
       </div>
+
+      <ChangePasswordModal 
+        isOpen={isChangePasswordOpen} 
+        onClose={() => setIsChangePasswordOpen(false)} 
+      />
     </div>
   );
 };

@@ -10,7 +10,7 @@ import { notifyUpdate } from '../utils/sse.js';
 
 export async function getDoctors(req, res) {
   try {
-    const { search, branch, branch_id, location_id, department_id, page, limit, sortBy, sortOrder } = req.query;
+    const { search, branch, location, branch_id, location_id, department_id, page, limit, sortBy, sortOrder } = req.query;
 
     const parsedBranchId = branch_id ? parseInt(branch_id, 10) : null;
     const parsedLocationId = location_id ? parseInt(location_id, 10) : null;
@@ -18,7 +18,7 @@ export async function getDoctors(req, res) {
     if (!page) {
       const doctors = await doctorRepository.findWithFilters({
         branches: branch ? [branch] : (parsedBranchId ? [parsedBranchId] : null),
-        locations: null,
+        locations: location ? [location] : (parsedLocationId ? [parsedLocationId] : null),
         departmentIds: department_id ? [department_id] : null,
         search: search || null,
       });
@@ -38,6 +38,7 @@ export async function getDoctors(req, res) {
     };
 
     if (branch) paginationParams.branchId = branch;
+    if (location) paginationParams.locationId = location; // Actually, in findPaginated, locationId is used. But wait, we should pass location name properly if needed. In findPaginated, if locationId is a string it's handled as l.name!
     if (parsedBranchId) paginationParams.branchId = parsedBranchId;
     if (parsedLocationId) paginationParams.locationId = parsedLocationId;
     if (department_id) paginationParams.departmentId = department_id;

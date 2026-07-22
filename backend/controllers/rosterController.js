@@ -510,6 +510,24 @@ export async function addManualRoster(req, res) {
   }
 }
 
+export async function updateManualRoster(req, res) {
+  const { id } = req.params;
+  const { timing } = req.body;
+
+  if (!timing) {
+    return res.status(400).json({ message: 'Timing is required.' });
+  }
+
+  try {
+    await rosterRepository.updateManualEntry(id, timing);
+    notifyUpdate();
+    return res.status(200).json({ message: 'Manual roster entry updated.' });
+  } catch (error) {
+    console.error('Update manual roster error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
 export async function deleteManualRoster(req, res) {
   const { id } = req.params;
 

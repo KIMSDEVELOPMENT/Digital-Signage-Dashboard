@@ -23,6 +23,10 @@ router.post('/manual', authenticateToken, checkModulePermission('Duty Roster', '
   import('../controllers/rosterController.js').then(c => c.addManualRoster(req, res));
 });
 
+router.put('/manual/:id', authenticateToken, checkModulePermission('Duty Roster', 'update'), (req, res) => {
+  import('../controllers/rosterController.js').then(c => c.updateManualRoster(req, res));
+});
+
 router.delete('/manual/:id', authenticateToken, checkModulePermission('Duty Roster', 'delete'), (req, res) => {
   import('../controllers/rosterController.js').then(c => c.deleteManualRoster(req, res));
 });
