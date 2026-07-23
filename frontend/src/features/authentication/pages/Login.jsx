@@ -133,6 +133,9 @@ const Login = () => {
             </button>
           </form>
         </div>
+        <p className="text-xs text-slate-500 font-medium text-center py-4">
+          &copy; {new Date().getFullYear()} KIMS ICT. All Rights Reserved.
+        </p>
       </div>
     </div>
   );
