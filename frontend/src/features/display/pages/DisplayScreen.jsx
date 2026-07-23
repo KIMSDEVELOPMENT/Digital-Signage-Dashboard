@@ -7,7 +7,7 @@ import { Clock, MonitorPlay, PhoneCall, Ambulance } from 'lucide-react';
 
 // Using the exact asset names requested
 import bgImg from '../../../common/assets/bg.png';
-import kimsLogo from '../../../common/assets/kims-logo.png';
+import kimsLogo from '../../../common/assets/logo.png';
 import kiitLogo from '../../../common/assets/kiit-logo.png';
 import kidsLogo from '../../../common/assets/kids-logo.png';
 import kssccLogo from '../../../common/assets/ksscc-logo.png';
@@ -47,7 +47,8 @@ const DisplayScreen = () => {
         const targetLoc = assignedLocs[0].location;
         navigate(`/display/${formatLocationForUrl(targetBranch)}/${formatLocationForUrl(targetLoc)}`, { replace: true });
       } else if (branches && branches.length > 0) {
-        const targetBranch = branches[0];
+        // Default to SSCC if available, otherwise first branch
+        const targetBranch = branches.find(b => b.toUpperCase() === 'SSCC') || branches[0];
         const targetLoc = (branchLocations && branchLocations[targetBranch] && branchLocations[targetBranch][0]) ? branchLocations[targetBranch][0] : 'main';
         navigate(`/display/${formatLocationForUrl(targetBranch)}/${formatLocationForUrl(targetLoc)}`, { replace: true });
       }
@@ -150,24 +151,32 @@ const DisplayScreen = () => {
             }
           });
 
-          // Phase 2: KSS Alone + Banner
-          const kssPages = buildPages(kssPlaylist, 'kss');
-          allPages.push(...kssPages);
-          if (kssPages.length > 0 || allPages.length > 0) {
-            allPages.push({ isBanner: true, duration: 10, bannerType: 'kss' });
-            if (kssPlaylist.video) {
-              allPages.push({ isVideo: true, duration: kssPlaylist.video.duration, videoUrl: kssPlaylist.video.url });
-            }
+          // Phase 2: First Banner
+          allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+          if (kssPlaylist.video || kccPlaylist.video) {
+            const vid = kssPlaylist.video || kccPlaylist.video;
+            allPages.push({ isVideo: true, duration: vid.duration, videoUrl: vid.url });
           }
 
-          // Phase 3: KCC Alone + Banner
-          const kccPages = buildPages(kccPlaylist, 'kcc');
-          allPages.push(...kccPages);
-          if (kccPages.length > 0 || allPages.length > 0) {
-            allPages.push({ isBanner: true, duration: 10, bannerType: 'kcc' });
-            if (kccPlaylist.video) {
-              allPages.push({ isVideo: true, duration: kccPlaylist.video.duration, videoUrl: kccPlaylist.video.url });
-            }
+          // Phase 3: KSS or KCC Alone depending on location
+          const locParam = formatLocationForUrl(location);
+          if (locParam === 'kss') {
+            const kssPages = buildPages(kssPlaylist, 'kss');
+            allPages.push(...kssPages);
+          } else if (locParam === 'kcc') {
+            const kccPages = buildPages(kccPlaylist, 'kcc');
+            allPages.push(...kccPages);
+          } else {
+            // fallback
+            allPages.push(...buildPages(kssPlaylist, 'kss'));
+            allPages.push(...buildPages(kccPlaylist, 'kcc'));
+          }
+
+          // Phase 4: Second Banner
+          allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+          if (kssPlaylist.video || kccPlaylist.video) {
+            const vid = kssPlaylist.video || kccPlaylist.video;
+            allPages.push({ isVideo: true, duration: vid.duration, videoUrl: vid.url });
           }
 
           if (allPages.length === 0) {
@@ -406,7 +415,9 @@ const DisplayScreen = () => {
                           )}
                         </div>
                         <div className="flex flex-col">
-                          <h3 className="text-3xl font-bold text-[#103061] tracking-wide" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{doc.name}</h3>
+                          <h3 className="text-3xl font-bold text-[#103061] tracking-wide" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+                            {doc.name.replace(/^Dr\.?\s*/i, 'Dr. ').replace(/(Dr\.\s*)(.*)/i, (_, prefix, name) => prefix + name.toUpperCase())}
+                          </h3>
                           <p className="text-lg text-[#4a6b8c] font-semibold uppercase tracking-widest mt-1">{doc.designation}</p>
                         </div>
                       </div>

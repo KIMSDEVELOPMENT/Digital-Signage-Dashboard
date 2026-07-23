@@ -18,10 +18,10 @@ export class DoctorRepository {
         )
       ) AS assignments
       FROM doctors doc
-      LEFT JOIN doctor_assignments da ON doc.id = da.doctor_id
-      LEFT JOIN branches b ON da.branch_id = b.id
-      LEFT JOIN locations l ON da.location_id = l.id
-      LEFT JOIN departments dept ON da.department_id = dept.id
+      JOIN doctor_assignments da ON doc.id = da.doctor_id
+        JOIN branches b ON da.branch_id = b.id AND b.status = 1
+        JOIN locations l ON da.location_id = l.id AND l.status = 1
+        JOIN departments dept ON da.department_id = dept.id AND dept.status = 1
     `;
   }
 
@@ -139,10 +139,10 @@ export class DoctorRepository {
     const countQuery = `
       SELECT COUNT(DISTINCT doc.id) AS total 
       FROM doctors doc
-      LEFT JOIN doctor_assignments da ON doc.id = da.doctor_id
-      LEFT JOIN branches b ON da.branch_id = b.id
-      LEFT JOIN locations l ON da.location_id = l.id
-      LEFT JOIN departments dept ON da.department_id = dept.id
+      JOIN doctor_assignments da ON doc.id = da.doctor_id
+        JOIN branches b ON da.branch_id = b.id AND b.status = 1
+        JOIN locations l ON da.location_id = l.id AND l.status = 1
+        JOIN departments dept ON da.department_id = dept.id AND dept.status = 1
       ${whereClause}
     `;
     const [countRows] = await pool.query(countQuery, countParams);

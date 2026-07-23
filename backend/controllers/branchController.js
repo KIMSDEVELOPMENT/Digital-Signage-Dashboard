@@ -58,11 +58,13 @@ export async function getBranchById(req, res) {
 }
 
 export async function createBranch(req, res) {
-  const { name, status } = req.body;
+  let { name, status } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ message: 'Branch name is required.' });
   }
+
+  name = name.trim().toUpperCase();
 
   try {
     const existing = await branchRepository.findByName(name.trim());
@@ -82,11 +84,13 @@ export async function createBranch(req, res) {
 
 export async function updateBranch(req, res) {
   const { id } = req.params;
-  const { name, status } = req.body;
+  let { name, status } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ message: 'Branch name is required.' });
   }
+
+  name = name.trim().toUpperCase();
 
   try {
     const branch = await branchRepository.findById(id);

@@ -236,8 +236,7 @@ const Doctor = () => {
       return;
     }
     
-    // Always ensure it gets sent to the server exactly as 'Dr. {name}'
-    name = 'Dr. ' + name.replace(/^Dr\.?\s*/i, '').trim();
+    name = 'Dr. ' + name.replace(/^Dr\.?\s*/i, '').trim().toUpperCase();
 
     setSubmitting(true);
     const loadToast = toast.loading(editingDoctor ? 'Saving changes...' : 'Registering doctor...');
@@ -251,6 +250,8 @@ const Doctor = () => {
 
     if (photoFile) {
       submissionData.append('photo', photoFile);
+    } else if (editingDoctor && editingDoctor.photo_url && !photoPreview) {
+      submissionData.append('remove_photo', 'true');
     }
 
     try {

@@ -2,15 +2,15 @@ import React, { useState } from 'react';
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../app/context/AuthContext';
 import BottomFooter from '../common/components/BottomFooter';
-import { 
-  LayoutDashboard, 
-  Building2, 
-  Users, 
-  ShieldAlert, 
-  CalendarDays, 
-  MonitorPlay, 
-  LogOut, 
-  Menu, 
+import {
+  LayoutDashboard,
+  Building2,
+  Users,
+  ShieldAlert,
+  CalendarDays,
+  MonitorPlay,
+  LogOut,
+  Menu,
   X,
   User,
   Settings,
@@ -18,7 +18,7 @@ import {
   Video,
   Lock
 } from 'lucide-react';
-import logoImg from '../common/assets/kims-logo.png';
+import logoImg from '../common/assets/logo.png';
 import ChangePasswordModal from '../features/authentication/components/ChangePasswordModal';
 
 const DashboardLayout = () => {
@@ -109,7 +109,7 @@ const DashboardLayout = () => {
     <div className="min-h-screen flex bg-slate-950 text-slate-100 font-sans">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
@@ -122,10 +122,10 @@ const DashboardLayout = () => {
       `}>
         {/* Sidebar Header */}
         <div className="h-20 flex items-center gap-3 px-6 border-b border-slate-800/40">
-          <img src={logoImg} alt="KIMS Logo" className="w-10 h-10 object-contain" />
-          <div>
-            <h1 className="font-heading font-bold text-sm tracking-tight text-emerald-400">KIMS HOSPITAL</h1>
-            <p className="text-[10px] text-slate-400 font-medium tracking-wider">DIGITAL SIGNAGE</p>
+          <img src={logoImg} alt="KIMS Logo" className="w-10 h-10 object-contain bg-white rounded-md p-0.5" />
+          <div className="flex flex-col">
+            <h1 className="font-heading font-bold text-[13px] tracking-tight text-emerald-400 leading-tight">KIMS HOSPITAL</h1>
+            <p className="text-[9px] text-slate-400 font-medium tracking-wider leading-tight">DIGITAL SIGNAGE</p>
           </div>
         </div>
 
@@ -143,8 +143,8 @@ const DashboardLayout = () => {
                 onClick={() => setSidebarOpen(false)}
                 className={`
                   flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all duration-250 group
-                  ${isActive 
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.05)]' 
+                  ${isActive
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.05)]'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent'}
                 `}
               >
@@ -181,8 +181,8 @@ const DashboardLayout = () => {
                     onClick={() => setSidebarOpen(false)}
                     className={`
                       flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all duration-250 group
-                      ${isActive 
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.05)]' 
+                      ${isActive
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.05)]'
                         : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent'}
                     `}
                   >
@@ -233,8 +233,11 @@ const DashboardLayout = () => {
         {/* Mobile Header */}
         <header className="h-16 lg:hidden flex items-center justify-between px-6 border-b border-slate-800/40 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30">
           <div className="flex items-center gap-2">
-            <img src={logoImg} alt="KIMS Logo" className="w-8 h-8 object-contain" />
-            <span className="font-heading font-bold text-sm tracking-tight text-emerald-400">KIMS Signage</span>
+            <img src={logoImg} alt="KIMS Logo" className="w-8 h-8 object-contain bg-white rounded p-0.5" />
+            <div className="flex flex-col">
+              <span className="font-heading font-bold text-[13px] tracking-tight text-emerald-400 leading-none">KIMS HOSPITAL</span>
+              <span className="text-[8px] text-slate-400 font-medium tracking-wider leading-tight">DIGITAL SIGNAGE</span>
+            </div>
           </div>
 
           <button
@@ -280,9 +283,9 @@ const DashboardLayout = () => {
         <BottomFooter />
       </div>
 
-      <ChangePasswordModal 
-        isOpen={isChangePasswordOpen} 
-        onClose={() => setIsChangePasswordOpen(false)} 
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
       />
     </div>
   );

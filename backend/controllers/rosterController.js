@@ -465,7 +465,7 @@ export async function getRosterByDate(req, res) {
 }
 
 export async function addManualRoster(req, res) {
-  const { date, doctor_id, timing, branch } = req.body;
+  const { date, doctor_id, timing, branch, location } = req.body;
 
   if (!date || !doctor_id || !timing || !branch) {
     return res.status(400).json({ message: 'Date, doctor ID, timing, and branch are required.' });
@@ -478,7 +478,7 @@ export async function addManualRoster(req, res) {
     }
 
     if (req.user && req.user.role === 'normal_admin') {
-      const assignment = doctor.assignments.find(a => a.branch_name && a.branch_name.toLowerCase() === branch.toLowerCase());
+      const assignment = doctor.assignments.find(a => a.branch_name && a.branch_name.toLowerCase() === branch.toLowerCase() && (!location || (a.location_name && a.location_name.toLowerCase() === location.toLowerCase())));
       if (assignment) {
         const hasAccess = await userRepository.hasLocationAccess(req.user.id, branch, assignment.location_name);
         if (!hasAccess) {
@@ -489,7 +489,7 @@ export async function addManualRoster(req, res) {
       }
     }
 
-    const assignment = doctor.assignments.find(a => a.branch_name && a.branch_name.toLowerCase() === branch.toLowerCase());
+    const assignment = doctor.assignments.find(a => a.branch_name && a.branch_name.toLowerCase() === branch.toLowerCase() && (!location || (a.location_name && a.location_name.toLowerCase() === location.toLowerCase())));
     if (!assignment) {
       return res.status(400).json({ message: 'Doctor is not assigned to this branch.' });
     }

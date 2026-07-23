@@ -19,7 +19,7 @@ router.get('/date', authenticateToken, checkModulePermission('Duty Roster', 'rea
   import('../controllers/rosterController.js').then(c => c.getRosterByDate(req, res));
 });
 
-router.post('/manual', authenticateToken, checkModulePermission('Duty Roster', 'update'), (req, res) => {
+router.post('/manual', authenticateToken, checkModulePermission('Duty Roster', 'create'), (req, res) => {
   import('../controllers/rosterController.js').then(c => c.addManualRoster(req, res));
 });
 

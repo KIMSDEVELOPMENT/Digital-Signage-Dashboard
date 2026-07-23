@@ -54,11 +54,13 @@ export async function getDepartments(req, res) {
 }
 
 export async function createDepartment(req, res) {
-  const { name, branch_id, location_id, status } = req.body;
+  let { name, branch_id, location_id, status } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ message: 'Department name is required.' });
   }
+
+  name = name.trim().toUpperCase();
 
   if (!branch_id) {
     return res.status(400).json({ message: 'Branch selection is required.' });
@@ -109,11 +111,13 @@ export async function createDepartment(req, res) {
 
 export async function updateDepartment(req, res) {
   const { id } = req.params;
-  const { name, branch_id, location_id, status } = req.body;
+  let { name, branch_id, location_id, status } = req.body;
 
   if (!name || !name.trim()) {
     return res.status(400).json({ message: 'Department name is required.' });
   }
+
+  name = name.trim().toUpperCase();
 
   if (!branch_id) {
     return res.status(400).json({ message: 'Branch selection is required.' });

@@ -140,12 +140,13 @@ const Roster = () => {
         date: selectedDate,
         doctor_id: selectedDoctor.id,
         timing: manualTiming,
-        branch: selectedBranch
+        branch: selectedBranch,
+        location: selectedLocation
       });
       toast.success('Manual entry added successfully!', { id: loadToast });
       setManualSearch('');
       setSelectedDoctor(null);
-      setManualTiming('');
+      setManualTiming('09:00 AM - 05:00 PM');
       setSearchResults([]);
       fetchRoster();
     } catch (err) {

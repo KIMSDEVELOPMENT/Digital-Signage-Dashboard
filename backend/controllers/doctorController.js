@@ -129,7 +129,7 @@ export async function createDoctor(req, res) {
 
 export async function updateDoctor(req, res) {
   const { id } = req.params;
-  const { employee_id, name, designation, status, assignments } = req.body;
+  const { employee_id, name, designation, status, assignments, remove_photo } = req.body;
 
   let parsedAssignments = [];
   if (assignments) {
@@ -176,6 +176,12 @@ export async function updateDoctor(req, res) {
         if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
       photo_url = `/uploads/${req.file.filename}`;
+    } else if (remove_photo === 'true' || remove_photo === true) {
+      if (existing.photo_url) {
+        const oldPath = path.join(process.cwd(), existing.photo_url);
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      }
+      photo_url = null;
     }
 
     const parsedStatus = status !== undefined ? (status == 'true' || status == 1 ? 1 : 0) : 1;
