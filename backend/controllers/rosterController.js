@@ -512,14 +512,32 @@ export async function addManualRoster(req, res) {
 
 export async function updateManualRoster(req, res) {
   const { id } = req.params;
-  const { timing } = req.body;
+  const { timing, doctor_id } = req.body;
 
-  if (!timing) {
-    return res.status(400).json({ message: 'Timing is required.' });
+  if (!timing && !doctor_id) {
+    return res.status(400).json({ message: 'Timing or doctor ID is required.' });
   }
 
   try {
-    await rosterRepository.updateManualEntry(id, timing);
+    if (req.user && req.user.role === 'normal_admin') {
+      const entry = await rosterRepository.findById(id);
+      if (!entry) {
+        return res.status(404).json({ message: 'Roster entry not found.' });
+      }
+      const hasAccess = await userRepository.hasLocationAccess(req.user.id, entry.branch_name, entry.location_name);
+      if (!hasAccess) {
+        return res.status(403).json({ message: 'You do not have access to edit roster entries for this location.' });
+      }
+    }
+
+    if (doctor_id) {
+      const doctor = await doctorRepository.findById(doctor_id);
+      if (!doctor) {
+        return res.status(404).json({ message: 'Doctor not found.' });
+      }
+    }
+
+    await rosterRepository.updateManualEntry(id, { doctor_id, timing });
     notifyUpdate();
     return res.status(200).json({ message: 'Manual roster entry updated.' });
   } catch (error) {
@@ -531,9 +549,11 @@ export async function updateManualRoster(req, res) {
 export async function deleteManualRoster(req, res) {
   const { id } = req.params;
 
+  if (req.user && req.user.role === 'normal_admin') {
+    return res.status(403).json({ message: 'Admin users are not allowed to delete roster entries. Only Super Admins can delete entries.' });
+  }
+
   try {
-    // In a real app, we should probably check if the user owns the branch of this roster entry,
-    // but for simplicity and since it's an admin panel, we'll allow it if they have Duty Roster delete perm.
     await rosterRepository.deleteManualEntry(id);
     notifyUpdate();
     return res.status(200).json({ message: 'Manual roster entry deleted.' });

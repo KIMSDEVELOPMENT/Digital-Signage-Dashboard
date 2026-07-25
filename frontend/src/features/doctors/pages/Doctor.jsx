@@ -192,7 +192,17 @@ const Doctor = () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       
-      toast.success(res.data.message || 'Bulk upload successful!', { id: loadToast });
+      toast.success(res.data.message || 'Bulk upload successful!', { id: loadToast, duration: 5000 });
+      if (res.data.errors && res.data.errors.length > 0) {
+        toast((t) => (
+          <div className="text-xs space-y-1 max-h-40 overflow-y-auto">
+            <p className="font-bold text-amber-400">Upload Validation Warnings:</p>
+            {res.data.errors.map((err, idx) => (
+              <p key={idx} className="text-slate-300">&bull; {err}</p>
+            ))}
+          </div>
+        ), { duration: 8000, icon: '⚠️' });
+      }
       fetchDoctors(search);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Error during bulk upload.', { id: loadToast });

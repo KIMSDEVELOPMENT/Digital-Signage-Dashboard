@@ -13,6 +13,7 @@ import {
   Trash2,
   Edit2,
   Save,
+  X,
   Plus,
   Search
 } from 'lucide-react';
@@ -37,6 +38,8 @@ const Roster = () => {
   // Edit State
   const [editingRosterId, setEditingRosterId] = useState(null);
   const [editTiming, setEditTiming] = useState('');
+  const [editDoctorId, setEditDoctorId] = useState('');
+  const [locationDoctors, setLocationDoctors] = useState([]);
   
   // States
   const [file, setFile] = useState(null);
@@ -57,6 +60,22 @@ const Roster = () => {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [duplicateExists, setDuplicateExists] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Fetch registered doctors for the selected location to populate edit dropdown
+  useEffect(() => {
+    if (!selectedBranch) return;
+    const fetchLocationDoctors = async () => {
+      try {
+        const res = await api.get('/doctors', {
+          params: { branch: selectedBranch, location: selectedLocation, status: 1, limit: 1000 }
+        });
+        setLocationDoctors(res.data.data || res.data || []);
+      } catch (err) {
+        console.error('Error fetching location doctors:', err);
+      }
+    };
+    fetchLocationDoctors();
+  }, [selectedBranch, selectedLocation]);
 
   // Auto-assign branch and location for normal admins
   useEffect(() => {
@@ -155,19 +174,22 @@ const Roster = () => {
     }
   };
 
-
   const handleUpdateTiming = async (id) => {
     if (!editTiming) return;
     const loadToast = toast.loading('Updating entry...');
     try {
-      await api.put(`/roster/manual/${id}`, { timing: editTiming });
+      await api.put(`/roster/manual/${id}`, {
+        timing: editTiming,
+        doctor_id: editDoctorId ? parseInt(editDoctorId, 10) : undefined
+      });
       toast.success('Entry updated successfully.', { id: loadToast });
       setEditingRosterId(null);
       setEditTiming('');
+      setEditDoctorId('');
       fetchRoster();
     } catch (err) {
       console.error(err);
-      toast.error('Failed to update entry.', { id: loadToast });
+      toast.error(err.response?.data?.message || 'Failed to update entry.', { id: loadToast });
     }
   };
 
@@ -492,19 +514,88 @@ const Roster = () => {
                     <tbody className="divide-y divide-slate-850/30">
                       {todayRoster.map((item) => (
                         <tr key={item.roster_id} className="hover:bg-slate-900/10 transition-colors">
-                          <td className="px-4 py-3 font-semibold text-white">{item.doctor_name}</td>
+                          <td className="px-4 py-3 font-semibold text-white">
+                            {editingRosterId === item.roster_id ? (
+                              <select
+                                value={editDoctorId}
+                                onChange={(e) => setEditDoctorId(e.target.value)}
+                                className="px-2 py-1 bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-xs text-white rounded cursor-pointer max-w-[200px]"
+                              >
+                                {!locationDoctors.some(d => d.id === item.doctor_id) && (
+                                  <option value={item.doctor_id}>{item.doctor_name}</option>
+                                )}
+                                {locationDoctors.map((doc) => (
+                                  <option key={doc.id} value={doc.id}>
+                                    {doc.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              item.doctor_name
+                            )}
+                          </td>
                           <td className="px-4 py-3 font-mono text-slate-400">{item.employee_id}</td>
                           <td className="px-4 py-3 text-slate-300">{item.department_name}</td>
-                          <td className="px-4 py-3 font-medium text-emerald-400">{item.timing}</td>
+                          <td className="px-4 py-3 font-medium text-emerald-400">
+                            {editingRosterId === item.roster_id ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editTiming}
+                                  onChange={(e) => setEditTiming(e.target.value)}
+                                  className="px-2 py-1 bg-slate-950 border border-slate-800 rounded text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateTiming(item.roster_id)}
+                                  className="p-1.5 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors"
+                                  title="Save Changes"
+                                >
+                                  <Save className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingRosterId(null);
+                                    setEditTiming('');
+                                    setEditDoctorId('');
+                                  }}
+                                  className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors"
+                                  title="Cancel"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              item.timing
+                            )}
+                          </td>
                           {hasPermission('Duty Roster', 'read') && (
                             <td className="px-4 py-3 text-right">
-                              <button
-                                onClick={() => handleDeleteManualEntry(item.roster_id)}
-                                className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"
-                                title="Remove Entry"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <div className="flex items-center justify-end gap-1">
+                                {editingRosterId !== item.roster_id && (
+                                  <button
+                                    onClick={() => {
+                                      setEditingRosterId(item.roster_id);
+                                      setEditTiming(item.timing);
+                                      setEditDoctorId(item.doctor_id);
+                                    }}
+                                    className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/20 transition-colors"
+                                    title="Edit Scheduled Doctor & Timing"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {user?.role === 'super_admin' && (
+                                  <button
+                                    onClick={() => handleDeleteManualEntry(item.roster_id)}
+                                    className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"
+                                    title="Remove Entry"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           )}
                         </tr>

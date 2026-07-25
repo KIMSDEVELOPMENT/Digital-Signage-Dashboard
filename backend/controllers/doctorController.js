@@ -163,6 +163,16 @@ export async function updateDoctor(req, res) {
       return res.status(404).json({ message: 'Doctor not found.' });
     }
 
+    if (req.user && req.user.role === 'normal_admin') {
+      const hasAnyAccess = await Promise.all(
+        (existing.assignments || []).map(a => userRepository.hasLocationAccess(req.user.id, a.branch_name, a.location_name))
+      );
+      if (!hasAnyAccess.some(Boolean)) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res.status(403).json({ message: 'You do not have permission to edit doctors outside your assigned locations.' });
+      }
+    }
+
     const empTaken = await doctorRepository.isEmployeeIdTakenGlobally(employee_id, id);
     if (empTaken) {
       if (req.file) fs.unlinkSync(req.file.path);
@@ -217,6 +227,10 @@ export async function updateDoctor(req, res) {
 export async function deleteDoctor(req, res) {
   const { id } = req.params;
 
+  if (req.user && req.user.role === 'normal_admin') {
+    return res.status(403).json({ message: 'Admin users are not allowed to delete doctors. Only Super Admins can delete doctors.' });
+  }
+
   try {
     const doctor = await doctorRepository.findById(id);
     if (!doctor) {
@@ -244,8 +258,9 @@ export async function downloadDoctorTemplate(req, res) {
     const wb = xlsx.utils.book_new();
     const ws = xlsx.utils.aoa_to_sheet([
       ['CLINICIAN', 'EMPLOYEE ID', 'TITLE / DESIGNATION', 'DEPARTMENTS', 'BRANCHES', 'LOCATIONS'],
-      ['Dr. John Doe', 'EMP001', 'Cardiologist', 'Cardiology', 'Main Hospital', 'Block A'],
-      ['Dr. Jane Smith', 'EMP002', 'Neurologist', 'Neurology', 'Main Hospital', 'Block B']
+      ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'PBMH', 'A BLOCK'],
+      ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'SSCC', 'KSS'],
+      ['Dr. JANE SMITH', '002', 'Cardiologist', 'Cardiology', 'PBMH', 'B BLOCK']
     ]);
     
     // Auto-size columns slightly
@@ -308,6 +323,7 @@ export async function uploadBulkDoctors(req, res) {
 
     let successCount = 0;
     let errorCount = 0;
+    const errorDetails = [];
 
     for (const row of data) {
       const name = row['CLINICIAN']?.toString().trim();
@@ -319,6 +335,7 @@ export async function uploadBulkDoctors(req, res) {
 
       if (!name || !empId || !designation || !departmentName || !branchName || !locationName) {
         errorCount++;
+        errorDetails.push(`Row skipped for Employee ID '${empId || 'N/A'}': Missing required fields.`);
         continue;
       }
 
@@ -334,13 +351,25 @@ export async function uploadBulkDoctors(req, res) {
 
       // Resolve IDs
       const branchId = branchCache[branchName.toLowerCase()];
-      if (!branchId) { errorCount++; continue; }
+      if (!branchId) {
+        errorCount++;
+        errorDetails.push(`Employee '${empId}' (${formattedName}): Branch '${branchName}' not found in master data.`);
+        continue;
+      }
 
       const locId = locCache[`${branchId}_${locationName.toLowerCase()}`];
-      if (!locId) { errorCount++; continue; }
+      if (!locId) {
+        errorCount++;
+        errorDetails.push(`Employee '${empId}' (${formattedName}): Location '${locationName}' not found under branch '${branchName}'.`);
+        continue;
+      }
 
       const deptId = deptCache[departmentName.toLowerCase()];
-      if (!deptId) { errorCount++; continue; }
+      if (!deptId) {
+        errorCount++;
+        errorDetails.push(`Employee '${empId}' (${formattedName}): Department '${departmentName}' not found in master data.`);
+        continue;
+      }
 
       if (!doctorsMap.has(empId)) {
         doctorsMap.set(empId, {
@@ -353,9 +382,22 @@ export async function uploadBulkDoctors(req, res) {
       }
 
       const doc = doctorsMap.get(empId);
-      // Avoid duplicate assignments for same doctor
-      const exists = doc.assignments.find(a => a.branch_id === branchId && a.location_id === locId && a.department_id === deptId);
-      if (!exists) {
+
+      // Validate: A doctor cannot be assigned to multiple blocks/locations within the same branch
+      const existingBranchAssign = doc.assignments.find(a => a.branch_id === branchId);
+      if (existingBranchAssign) {
+        if (existingBranchAssign.location_id !== locId) {
+          errorCount++;
+          errorDetails.push(`Employee '${empId}' (${formattedName}): Cannot assign doctor to multiple blocks ('${locationName}') within the same branch '${branchName}'.`);
+          continue;
+        }
+        // If same branch and location, check if duplicate exact assignment
+        const exists = doc.assignments.some(a => a.branch_id === branchId && a.location_id === locId && a.department_id === deptId);
+        if (!exists) {
+          doc.assignments.push({ branch_id: branchId, location_id: locId, department_id: deptId });
+        }
+      } else {
+        // Different branch (e.g. PBMH then SSCC) -> ALLOWED!
         doc.assignments.push({ branch_id: branchId, location_id: locId, department_id: deptId });
       }
     }
@@ -367,26 +409,39 @@ export async function uploadBulkDoctors(req, res) {
       // Check if exists
       const existing = await doctorRepository.findByEmployeeId(empId);
       if (existing) {
-        // Update existing, maintaining their photo if any
-        await doctorRepository.update(existing.id, {
+        // Update existing doctor with updated assignments and master details
+        await doctorRepository.updateDoctor(existing.id, {
           employee_id: docData.employee_id,
           name: docData.name,
           designation: docData.designation,
           status: docData.status,
           photo_url: existing.photo_url,
-          assignments: docData.assignments
         });
+        await doctorRepository.syncAssignments(existing.id, docData.assignments);
       } else {
-        // Create new
-        await doctorRepository.create(docData);
+        // Create new doctor
+        const newId = await doctorRepository.createDoctor({
+          employee_id: docData.employee_id,
+          name: docData.name,
+          designation: docData.designation,
+          photo_url: null,
+          status: docData.status,
+        });
+        await doctorRepository.syncAssignments(newId, docData.assignments);
       }
       successCount++;
     }
 
     notifyUpdate();
 
+    let responseMsg = `Bulk upload completed. Processed ${successCount} doctor profile(s).`;
+    if (errorCount > 0) {
+      responseMsg += ` Skipped ${errorCount} row(s) due to validation/master data issues.`;
+    }
+
     return res.status(200).json({ 
-      message: `Bulk upload completed. Processed ${successCount} doctors. Skipped/failed ${errorCount} rows due to missing/invalid master data.`
+      message: responseMsg,
+      errors: errorDetails
     });
   } catch (error) {
     console.error('Bulk upload error:', error);

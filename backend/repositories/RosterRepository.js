@@ -62,9 +62,27 @@ export class RosterRepository {
     await pool.query('DELETE FROM roster WHERE id = ?', [id]);
   }
 
-  async updateManualEntry(id, timing) {
+  async updateManualEntry(id, payload) {
     const pool = getPool();
-    await pool.query('UPDATE roster SET timing = ? WHERE id = ?', [timing, id]);
+    let timing = typeof payload === 'string' ? payload : payload?.timing;
+    let doctor_id = typeof payload === 'object' ? payload?.doctor_id : null;
+
+    const updates = [];
+    const params = [];
+
+    if (timing) {
+      updates.push('timing = ?');
+      params.push(timing);
+    }
+    if (doctor_id) {
+      updates.push('doctor_id = ?');
+      params.push(doctor_id);
+    }
+
+    if (updates.length > 0) {
+      params.push(id);
+      await pool.query(`UPDATE roster SET ${updates.join(', ')} WHERE id = ?`, params);
+    }
   }
 
   async importRoster(entries) {
@@ -105,6 +123,20 @@ export class RosterRepository {
     } finally {
       connection.release();
     }
+  }
+
+  async findById(id) {
+    const pool = getPool();
+    const [rows] = await pool.query(
+      `SELECT r.id AS roster_id, r.date, r.timing, r.branch_id, r.location_id,
+              b.name AS branch_name, l.name AS location_name, r.doctor_id
+       FROM roster r
+       JOIN branches b ON r.branch_id = b.id
+       JOIN locations l ON r.location_id = l.id
+       WHERE r.id = ?`,
+      [id]
+    );
+    return rows.length > 0 ? rows[0] : null;
   }
 }
 
