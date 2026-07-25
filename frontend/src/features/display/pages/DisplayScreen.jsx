@@ -7,7 +7,7 @@ import { Clock, MonitorPlay, PhoneCall, Ambulance } from 'lucide-react';
 
 // Using the exact asset names requested
 import bgImg from '../../../common/assets/bg.png';
-import kimsLogo from '../../../common/assets/logo.png';
+import kimsLogo from '../../../common/assets/kims-logo.png';
 import kiitLogo from '../../../common/assets/kiit-logo.png';
 import kidsLogo from '../../../common/assets/kids-logo.png';
 import kssccLogo from '../../../common/assets/ksscc-logo.png';
@@ -138,10 +138,11 @@ const DisplayScreen = () => {
           processForCombined(kssPlaylist);
           processForCombined(kccPlaylist);
 
+          const combinedPages = [];
           Object.keys(combinedDepts).sort().forEach(deptName => {
             const doctors = combinedDepts[deptName];
             for (let i = 0; i < doctors.length; i += 3) {
-              allPages.push({
+              combinedPages.push({
                 stepTitle: 'OPD SCHEDULED',
                 duration: 10,
                 department: deptName,
@@ -151,40 +152,47 @@ const DisplayScreen = () => {
             }
           });
 
-          // Phase 2: First Banner
-          allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
-          if (kssPlaylist.video || kccPlaylist.video) {
-            const vid = kssPlaylist.video || kccPlaylist.video;
-            allPages.push({ isVideo: true, duration: vid.duration, videoUrl: vid.url });
-          }
-
-          // Phase 3: KSS or KCC Alone depending on location
+          // Build Location Specific Pages (KSS or KCC)
           const locParam = formatLocationForUrl(location);
+          let locationPages = [];
           if (locParam === 'kss') {
-            const kssPages = buildPages(kssPlaylist, 'kss');
-            allPages.push(...kssPages);
+            locationPages = buildPages(kssPlaylist, 'kss');
           } else if (locParam === 'kcc') {
-            const kccPages = buildPages(kccPlaylist, 'kcc');
-            allPages.push(...kccPages);
+            locationPages = buildPages(kccPlaylist, 'kcc');
           } else {
-            // fallback
-            allPages.push(...buildPages(kssPlaylist, 'kss'));
-            allPages.push(...buildPages(kccPlaylist, 'kcc'));
+            locationPages = [
+              ...buildPages(kssPlaylist, 'kss'),
+              ...buildPages(kccPlaylist, 'kcc')
+            ];
           }
 
-          // Phase 4: Second Banner
-          allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
-          if (kssPlaylist.video || kccPlaylist.video) {
-            const vid = kssPlaylist.video || kccPlaylist.video;
-            allPages.push({ isVideo: true, duration: vid.duration, videoUrl: vid.url });
-          }
+          const hasVideo = kssPlaylist.video || kccPlaylist.video;
+          const videoObj = kssPlaylist.video || kccPlaylist.video;
 
-          if (allPages.length === 0) {
+          if (combinedPages.length === 0 && locationPages.length === 0) {
+            // No doctors scheduled at all - Show 'No schedules' page FIRST
             allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
-            allPages.push({ isBanner: true, duration: 10 });
-            if (kssPlaylist.video || kccPlaylist.video) {
-              const vid = kssPlaylist.video || kccPlaylist.video;
-              allPages.push({ isVideo: true, duration: vid.duration, videoUrl: vid.url });
+            allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+            if (hasVideo) {
+              allPages.push({ isVideo: true, duration: videoObj.duration, videoUrl: videoObj.url });
+            }
+          } else {
+            // Add Combined OPD pages first if available
+            if (combinedPages.length > 0) {
+              allPages.push(...combinedPages);
+              allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+              if (hasVideo) {
+                allPages.push({ isVideo: true, duration: videoObj.duration, videoUrl: videoObj.url });
+              }
+            }
+
+            // Add Location-specific pages next if available
+            if (locationPages.length > 0) {
+              allPages.push(...locationPages);
+              allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+              if (hasVideo) {
+                allPages.push({ isVideo: true, duration: videoObj.duration, videoUrl: videoObj.url });
+              }
             }
           }
 
