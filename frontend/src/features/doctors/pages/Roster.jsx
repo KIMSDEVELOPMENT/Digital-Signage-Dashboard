@@ -273,7 +273,9 @@ const Roster = () => {
         date: row.date,
         doctor_id: row.doctor_id,
         employee_id: row.employee_id,
-        timing: row.timing
+        timing: row.timing,
+        branch_id: row.branch_id,
+        location_id: row.location_id
       }));
 
       // 3. Import (auto replace)

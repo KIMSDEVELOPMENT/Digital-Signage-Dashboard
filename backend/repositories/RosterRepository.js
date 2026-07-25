@@ -105,8 +105,7 @@ export class RosterRepository {
       // Delete existing rosters for those dates and branches
       for (const combo of uniqueCombos) {
         await connection.query(
-          `DELETE r FROM roster r JOIN doctors d ON r.doctor_id = d.id
-           WHERE r.date = ? AND d.branch_id = ?`,
+          `DELETE FROM roster WHERE date = ? AND branch_id = ?`,
           [combo.date, combo.branchId]
         );
       }

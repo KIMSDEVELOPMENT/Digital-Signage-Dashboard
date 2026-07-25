@@ -153,7 +153,11 @@ export async function previewRoster(req, res) {
     const doctorLookup = {};
     const docBranchBlockMap = {}; // Maps nameKey -> assigned block for this branch
     doctorsList.forEach(doc => {
-      const nameKey = doc.name.trim().toLowerCase();
+      let nameKey = doc.name.trim().toLowerCase();
+      if (nameKey.startsWith('dr. ')) nameKey = nameKey.substring(4);
+      else if (nameKey.startsWith('dr ')) nameKey = nameKey.substring(3);
+      nameKey = nameKey.trim();
+      
       if (doc.assignments && doc.assignments.length > 0) {
         doc.assignments.forEach(assignment => {
           if (assignment.branch_name && assignment.branch_name.toLowerCase() === branch.toLowerCase()) {
