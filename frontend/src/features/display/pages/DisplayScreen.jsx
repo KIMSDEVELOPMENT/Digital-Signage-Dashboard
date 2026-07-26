@@ -248,15 +248,23 @@ const DisplayScreen = () => {
     };
   }, [branch, location]);
 
+  const goToNextPage = () => {
+    setCurrentPageIndex((prev) => (prev + 1) % pages.length);
+  };
+
   useEffect(() => {
     if (pages.length <= 1) return;
     const currentPage = pages[currentPageIndex];
+    
+    if (currentPage?.isVideo) {
+      // For videos, wait generously (duration + 30s) as a fallback in case onEnded fails
+      const fallbackDurationMs = ((currentPage.duration || 10) + 30) * 1000;
+      const timer = setTimeout(goToNextPage, fallbackDurationMs);
+      return () => clearTimeout(timer);
+    }
+
     const durationMs = (currentPage?.duration || 10) * 1000;
-
-    const timer = setTimeout(() => {
-      setCurrentPageIndex((prev) => (prev + 1) % pages.length);
-    }, durationMs);
-
+    const timer = setTimeout(goToNextPage, durationMs);
     return () => clearTimeout(timer);
   }, [currentPageIndex, pages]);
 
@@ -364,14 +372,17 @@ const DisplayScreen = () => {
       {/* Main Content Area */}
       <main className={`flex-1 flex flex-col z-10 overflow-hidden min-h-0 ${(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) ? 'px-12 py-6' : ''}`}>
         {currentPage && currentPage.isVideo ? (
-          <div className="flex-1 flex items-center justify-center overflow-hidden bg-black h-full w-full">
-            <video
-              src={getFullPhotoUrl(currentPage.videoUrl)}
-              className="w-full h-full object-contain"
-              autoPlay
-              muted
-            />
-          </div>
+            <div className="flex-1 flex items-center justify-center overflow-hidden bg-black h-full w-full">
+              <video
+                src={getFullPhotoUrl(currentPage.videoUrl)}
+                className="w-full h-full object-contain"
+                autoPlay
+                muted
+                preload="auto"
+                onEnded={goToNextPage}
+                onError={goToNextPage}
+              />
+            </div>
         ) : currentPage && currentPage.isBanner ? (
           <AnimatePresence mode="wait">
             <motion.div
