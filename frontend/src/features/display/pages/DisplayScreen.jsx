@@ -330,24 +330,24 @@ const DisplayScreen = () => {
 
       {/* Header - Transparent background to show bg-image behind it */}
       {(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) && (
-        <header className="flex items-center justify-between px-10 py-6 z-10 shrink-0 min-h-[160px]">
+        <header className="flex items-center justify-between px-10 py-2 z-10 shrink-0 min-h-[120px] relative">
 
           {/* Left Spacer for perfect center alignment */}
-          <div className="w-1/4"></div>
+          <div className="w-1/5"></div>
 
           {/* Center: Banner Logo */}
           <div className="flex-1 flex items-center justify-center px-4">
             {isDental ? (
-              <img src={kidsLogo} alt="KIDS Banner" className="w-full max-w-[900px] max-h-[180px] object-contain mix-blend-darken opacity-80" />
+              <img src={kidsLogo} alt="KIDS Banner" className="w-full max-w-[1200px] max-h-[140px] object-contain mix-blend-darken opacity-80" />
             ) : isSuperSpeciality ? (
-              <img src={kssccLogo} alt="KSSCC Banner" className="w-full max-w-[900px] max-h-[180px] object-contain mix-blend-darken opacity-80" />
+              <img src={kssccLogo} alt="KSSCC Banner" className="w-full max-w-[1200px] max-h-[140px] object-contain mix-blend-darken opacity-80 scale-x-125" />
             ) : (
-              <img src={kimsLogo} alt="KIMS Banner" className="w-full max-w-[900px] max-h-[180px] object-contain mix-blend-darken opacity-80" />
+              <img src={kimsLogo} alt="KIMS Banner" className="w-full max-w-[1200px] max-h-[140px] object-contain mix-blend-darken opacity-80" />
             )}
           </div>
 
           {/* Right Side: Date & Time */}
-          <div className="w-1/4 text-right flex flex-col items-end text-[#1c4587] justify-center">
+          <div className="w-1/5 text-right flex flex-col items-end text-[#1c4587] justify-center">
             <p className="text-3xl font-medium whitespace-nowrap" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{dateString}</p>
             <p className="text-7xl font-bold mt-1 tracking-tight" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{timeString}</p>
           </div>
