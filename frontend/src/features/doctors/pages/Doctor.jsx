@@ -555,6 +555,11 @@ const Doctor = () => {
                             <Edit2 className="w-4 h-4" />
                           </button>
                         )}
+                        {user.role === 'super_admin' && (
+                          <button onClick={() => handleDeleteDoctor(doc.id, doc.name)} className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors cursor-pointer" title="Delete Doctor">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

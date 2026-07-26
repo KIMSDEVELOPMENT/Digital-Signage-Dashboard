@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import * as xlsx from 'xlsx';
+import xlsx from 'xlsx';
 import doctorRepository from '../repositories/DoctorRepository.js';
 import departmentRepository from '../repositories/DepartmentRepository.js';
 import branchRepository from '../repositories/BranchRepository.js';
@@ -446,6 +446,6 @@ export async function uploadBulkDoctors(req, res) {
   } catch (error) {
     console.error('Bulk upload error:', error);
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    return res.status(500).json({ message: 'Internal server error.' });
+    return res.status(500).json({ message: 'Internal server error: ' + error.message, stack: error.stack });
   }
 }
