@@ -18,6 +18,25 @@ const formatLocationForUrl = (loc) => {
   return loc.toLowerCase().replace(/[\s/]+/g, '-').replace(/-+/g, '-');
 };
 
+const LiveClock = () => {
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeString = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const dateString = time.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+
+  return (
+    <div className="w-1/5 text-right flex flex-col items-end text-[#1c4587] justify-center">
+      <p className="text-3xl font-medium whitespace-nowrap" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{dateString}</p>
+      <p className="text-7xl font-bold mt-1 tracking-tight" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{timeString}</p>
+    </div>
+  );
+};
+
 const DisplayScreen = () => {
   const { branch: paramBranch, location: paramLocation } = useParams();
   const [searchParams] = useSearchParams();
@@ -28,17 +47,11 @@ const DisplayScreen = () => {
   const location = paramLocation || searchParams.get('location');
   const assignedLocs = getAssignedLocations() || [];
 
-  const [time, setTime] = useState(new Date());
   const [playlist, setPlaylist] = useState(null);
   const [pages, setPages] = useState([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (!branch || !location) {
@@ -258,7 +271,7 @@ const DisplayScreen = () => {
 
     if (currentPage?.isVideo) {
       // For videos, wait generously (duration + 30s) as a fallback in case onEnded fails
-      const fallbackDurationMs = ((currentPage.duration || 10) + 30) * 1000;
+      const fallbackDurationMs = (Number(currentPage.duration || 10) + 30) * 1000;
       const timer = setTimeout(goToNextPage, fallbackDurationMs);
       return () => clearTimeout(timer);
     }
@@ -290,8 +303,6 @@ const DisplayScreen = () => {
     );
   }
 
-  const timeString = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const dateString = time.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const currentPage = pages[currentPageIndex];
 
   // Dynamic Header Configuration
@@ -355,10 +366,7 @@ const DisplayScreen = () => {
           </div>
 
           {/* Right Side: Date & Time */}
-          <div className="w-1/5 text-right flex flex-col items-end text-[#1c4587] justify-center">
-            <p className="text-3xl font-medium whitespace-nowrap" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{dateString}</p>
-            <p className="text-7xl font-bold mt-1 tracking-tight" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{timeString}</p>
-          </div>
+          <LiveClock />
         </header>
       )}
 

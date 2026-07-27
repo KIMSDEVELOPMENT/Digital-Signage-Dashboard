@@ -6,6 +6,11 @@ import branchRepository from '../repositories/BranchRepository.js';
 import locationRepository from '../repositories/LocationRepository.js';
 import userRepository from '../repositories/UserRepository.js';
 import { notifyUpdate } from '../utils/sse.js';
+import ffmpegPath from 'ffmpeg-static';
+import { execFile } from 'child_process';
+import util from 'util';
+
+const execFileAsync = util.promisify(execFile);
 
 export async function uploadVideo(req, res) {
   if (!req.file) {
@@ -55,6 +60,37 @@ export async function uploadVideo(req, res) {
     if (duration > 300) { // 300 seconds = 5 minutes
       if (req.file) fs.unlinkSync(req.file.path);
       return res.status(400).json({ message: 'Video duration exceeds the 5-minute maximum limit.' });
+    }
+
+    // Compression step
+    const originalPath = req.file.path;
+    const outputFilename = `compressed-${req.file.filename}.mp4`;
+    const outputPath = path.join(path.dirname(originalPath), outputFilename);
+
+    try {
+      await execFileAsync(ffmpegPath, [
+        '-i', originalPath,
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '28',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-movflags', '+faststart',
+        outputPath
+      ]);
+      
+      // Get new file stats
+      const stats = fs.statSync(outputPath);
+      req.file.size = stats.size;
+      req.file.filename = outputFilename;
+      
+      // Delete original uncompressed file
+      if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
+    } catch (err) {
+      console.error('FFmpeg compression error:', err);
+      if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
+      if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+      return res.status(500).json({ message: 'Failed to compress video. Make sure it is a valid video file.' });
     }
 
     // 4. Save to database
