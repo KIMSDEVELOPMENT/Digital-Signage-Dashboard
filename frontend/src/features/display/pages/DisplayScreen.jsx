@@ -255,7 +255,7 @@ const DisplayScreen = () => {
   useEffect(() => {
     if (pages.length <= 1) return;
     const currentPage = pages[currentPageIndex];
-    
+
     if (currentPage?.isVideo) {
       // For videos, wait generously (duration + 30s) as a fallback in case onEnded fails
       const fallbackDurationMs = ((currentPage.duration || 10) + 30) * 1000;
@@ -340,17 +340,17 @@ const DisplayScreen = () => {
       {(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) && (
         <header className="flex items-center justify-between px-10 py-2 z-10 shrink-0 min-h-[120px] relative">
 
-          {/* Left Spacer for perfect center alignment */}
-          <div className="w-1/5"></div>
+          {/* Left Spacer to shift logo leftwards */}
+          <div className="w-[10%]"></div>
 
           {/* Center: Banner Logo */}
           <div className="flex-1 flex items-center justify-center px-4">
             {isDental ? (
-              <img src={kidsLogo} alt="KIDS Banner" className="w-full max-w-[1200px] max-h-[140px] object-contain mix-blend-darken opacity-80" />
+              <img src={kidsLogo} alt="KIDS Banner" className="w-full max-w-[1200px] max-h-[180px] object-contain" />
             ) : isSuperSpeciality ? (
-              <img src={kssccLogo} alt="KSSCC Banner" className="w-full max-w-[1200px] max-h-[140px] object-contain mix-blend-darken opacity-80 scale-x-125" />
+              <img src={kssccLogo} alt="KSSCC Banner" className="w-full max-w-[1200px] max-h-[180px] object-contain" />
             ) : (
-              <img src={kimsLogo} alt="KIMS Banner" className="w-full max-w-[1200px] max-h-[140px] object-contain mix-blend-darken opacity-80" />
+              <img src={kimsLogo} alt="KIMS Banner" className="w-full max-w-[1200px] max-h-[180px] object-contain" />
             )}
           </div>
 
@@ -372,17 +372,17 @@ const DisplayScreen = () => {
       {/* Main Content Area */}
       <main className={`flex-1 flex flex-col z-10 overflow-hidden min-h-0 ${(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) ? 'px-12 py-6' : ''}`}>
         {currentPage && currentPage.isVideo ? (
-            <div className="flex-1 flex items-center justify-center overflow-hidden bg-black h-full w-full">
-              <video
-                src={getFullPhotoUrl(currentPage.videoUrl)}
-                className="w-full h-full object-contain"
-                autoPlay
-                muted
-                preload="auto"
-                onEnded={goToNextPage}
-                onError={goToNextPage}
-              />
-            </div>
+          <div className="flex-1 flex items-center justify-center overflow-hidden bg-black h-full w-full">
+            <video
+              src={getFullPhotoUrl(currentPage.videoUrl)}
+              className="w-full h-full object-contain"
+              autoPlay
+              muted
+              preload="auto"
+              onEnded={goToNextPage}
+              onError={goToNextPage}
+            />
+          </div>
         ) : currentPage && currentPage.isBanner ? (
           <AnimatePresence mode="wait">
             <motion.div
