@@ -18,6 +18,7 @@ import {
   Search
 } from 'lucide-react';
 import { TableSkeleton } from '../../../common/components/Skeleton';
+import Pagination from '../../../common/components/Pagination';
 import { toast } from 'react-hot-toast';
 
 const Roster = () => {
@@ -39,6 +40,9 @@ const Roster = () => {
   const [editingRosterId, setEditingRosterId] = useState(null);
   const [editTiming, setEditTiming] = useState('');
   const [editDoctorId, setEditDoctorId] = useState('');
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
   const [locationDoctors, setLocationDoctors] = useState([]);
   
   // States
@@ -108,6 +112,7 @@ const Roster = () => {
         params: { branch: selectedBranch, location: selectedLocation, date: selectedDate }
       });
       setTodayRoster(res.data);
+      setCurrentPage(1); // Reset page on fetch
     } catch (err) {
       console.error(err);
       setTodayRoster([]);
@@ -514,7 +519,7 @@ const Roster = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-850/30">
-                      {todayRoster.map((item) => (
+                      {todayRoster.slice((currentPage - 1) * itemsPerPage, (currentPage - 1) * itemsPerPage + itemsPerPage).map((item) => (
                         <tr key={item.roster_id} className="hover:bg-slate-900/10 transition-colors">
                           <td className="px-4 py-3 font-semibold text-white">
                             {editingRosterId === item.roster_id ? (
@@ -604,6 +609,22 @@ const Roster = () => {
                       ))}
                     </tbody>
                   </table>
+                  {todayRoster.length > itemsPerPage && (
+                    <div className="border-t border-slate-800 bg-slate-900/40">
+                      <Pagination
+                        pagination={{
+                          page: currentPage,
+                          limit: itemsPerPage,
+                          totalRecords: todayRoster.length,
+                          totalPages: Math.ceil(todayRoster.length / itemsPerPage),
+                          hasNextPage: currentPage < Math.ceil(todayRoster.length / itemsPerPage),
+                          hasPreviousPage: currentPage > 1
+                        }}
+                        onPageChange={setCurrentPage}
+                        onLimitChange={() => {}}
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="p-8 text-center border border-slate-800/40 bg-slate-950/20 rounded-xl">
