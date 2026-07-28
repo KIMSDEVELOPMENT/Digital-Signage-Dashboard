@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Video, UploadCloud, Trash2, AlertCircle, X, Plus } from 'lucide-react';
 import api from '../../../common/services/api';
 import { useAuth } from '../../../app/context/AuthContext';
+import { toast } from 'react-hot-toast';
 
 const VideoManagement = () => {
   const { user, branches, branchLocations, getAssignedLocations } = useAuth();
@@ -17,6 +18,7 @@ const VideoManagement = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [title, setTitle] = useState('');
+  const [playOrder, setPlayOrder] = useState(1);
   
   const [selectedBranch, setSelectedBranch] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
@@ -62,8 +64,8 @@ const VideoManagement = () => {
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
     if (selected) {
-      if (selected.size > 500 * 1024 * 1024) {
-        setError('File size must be less than 500MB.');
+      if (selected.size > 1024 * 1024 * 1024) {
+        setError('File size must be less than 1GB.');
         setFile(null);
         return;
       }
@@ -111,6 +113,7 @@ const VideoManagement = () => {
       formData.append('branch_id', branchObj.id);
       formData.append('location_id', locObj.id);
       formData.append('title', title);
+      formData.append('play_order', playOrder);
 
       await api.post('/videos/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -188,6 +191,7 @@ const VideoManagement = () => {
             <thead>
               <tr className="border-b border-slate-800/80 bg-slate-900/30">
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Title</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Order</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Duration</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">File Size</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Created Date</th>
@@ -197,13 +201,13 @@ const VideoManagement = () => {
             <tbody className="divide-y divide-slate-800/40">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500 font-medium">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500 font-medium">
                     Loading videos...
                   </td>
                 </tr>
               ) : videos.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500 font-medium">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500 font-medium">
                     No uploaded signage videos found.
                   </td>
                 </tr>
@@ -219,6 +223,9 @@ const VideoManagement = () => {
                           </span>
                         )}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 font-mono text-sm text-slate-300">
+                      {video.play_order}
                     </td>
                     <td className="px-6 py-4 font-mono text-sm text-slate-300">
                       {Math.floor(video.duration / 60)}:{(Math.floor(video.duration % 60)).toString().padStart(2, '0')}
@@ -275,6 +282,19 @@ const VideoManagement = () => {
                 />
               </div>
 
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                  Play Order (Sequence) *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={playOrder}
+                  onChange={(e) => setPlayOrder(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl text-sm bg-[#0b1120] border border-slate-800 focus:border-emerald-500 focus:outline-none text-slate-200 placeholder-slate-600 shadow-inner transition-colors"
+                />
+              </div>
+
               {isSuperAdmin && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -317,7 +337,7 @@ const VideoManagement = () => {
                     {file ? file.name : 'Select video file...'}
                   </p>
                   <p className="text-[10px] text-slate-500 text-center mt-2 font-medium tracking-wide">
-                    Max 500 MB & 5 minutes (mp4, webm, mov, mkv)
+                    Max 1 GB & 20 minutes (mp4, webm, mov, mkv)
                   </p>
                   <input
                     type="file"

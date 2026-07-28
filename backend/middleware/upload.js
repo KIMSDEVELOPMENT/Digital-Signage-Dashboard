@@ -96,6 +96,6 @@ const videoStorage = multer.diskStorage({
 
 export const uploadVideo = multer({
   storage: videoStorage,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB limit
+  limits: { fileSize: 1024 * 1024 * 1024 }, // 1GB limit
   fileFilter: videoFilter,
 });

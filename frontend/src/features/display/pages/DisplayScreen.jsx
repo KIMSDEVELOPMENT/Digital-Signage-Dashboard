@@ -121,7 +121,7 @@ const DisplayScreen = () => {
         };
 
         if (branch.toLowerCase() === 'sscc') {
-          // Fetch both
+          // Fetch both KSS/KCC playlists
           const [resKss, resKcc] = await Promise.all([
             api.get('/display/sscc/kss').catch(() => ({ data: null })),
             api.get('/display/sscc/kcc').catch(() => ({ data: null }))
@@ -179,33 +179,50 @@ const DisplayScreen = () => {
             ];
           }
 
-          const hasVideo = kssPlaylist.video || kccPlaylist.video;
-          const videoObj = kssPlaylist.video || kccPlaylist.video;
-
-          if (combinedPages.length === 0 && locationPages.length === 0) {
-            // No doctors scheduled at all - Show 'No schedules' page FIRST
-            allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
-            allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
-            if (hasVideo) {
-              allPages.push({ isVideo: true, duration: videoObj.duration, videoUrl: videoObj.url });
-            }
+          // Aggregate and sort videos for the current location
+          let allBranchVideos = [];
+          if (locParam === 'kss') {
+            allBranchVideos = [...(kssPlaylist.videos || [])];
+          } else if (locParam === 'kcc') {
+            allBranchVideos = [...(kccPlaylist.videos || [])];
           } else {
-            // Add Combined OPD pages first if available
-            if (combinedPages.length > 0) {
-              allPages.push(...combinedPages);
-              allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
-              if (hasVideo) {
-                allPages.push({ isVideo: true, duration: videoObj.duration, videoUrl: videoObj.url });
-              }
-            }
+            allBranchVideos = [
+              ...(kssPlaylist.videos || []),
+              ...(kccPlaylist.videos || [])
+            ];
+          }
+          allBranchVideos.sort((a, b) => a.playOrder - b.playOrder);
 
-            // Add Location-specific pages next if available
-            if (locationPages.length > 0) {
-              allPages.push(...locationPages);
+          if (allBranchVideos.length === 0) {
+            // No videos: Just run the loop once without videos
+            if (combinedPages.length > 0) allPages.push(...combinedPages);
+            else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
+            
+            allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+            
+            if (locationPages.length > 0) allPages.push(...locationPages);
+            else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
+            
+            allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+          } else {
+            // Pair up videos and loop the sequence
+            for (let i = 0; i < allBranchVideos.length; i += 2) {
+              const v1 = allBranchVideos[i];
+              const v2 = allBranchVideos[i+1];
+
+              // Slot 1: After Combined
+              if (combinedPages.length > 0) allPages.push(...combinedPages);
+              else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
+              
               allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
-              if (hasVideo) {
-                allPages.push({ isVideo: true, duration: videoObj.duration, videoUrl: videoObj.url });
-              }
+              if (v1) allPages.push({ isVideo: true, duration: v1.duration, videoUrl: v1.url });
+
+              // Slot 2: After Location
+              if (locationPages.length > 0) allPages.push(...locationPages);
+              else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
+              
+              allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+              if (v2) allPages.push({ isVideo: true, duration: v2.duration, videoUrl: v2.url });
             }
           }
 
@@ -223,8 +240,10 @@ const DisplayScreen = () => {
             allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
           }
           allPages.push({ isBanner: true, duration: 10 });
-          if (fetchedPlaylist.video) {
-            allPages.push({ isVideo: true, duration: fetchedPlaylist.video.duration, videoUrl: fetchedPlaylist.video.url });
+          if (fetchedPlaylist.videos && fetchedPlaylist.videos.length > 0) {
+            fetchedPlaylist.videos.forEach(v => {
+              allPages.push({ isVideo: true, duration: v.duration, videoUrl: v.url });
+            });
           }
 
           setPages(allPages);

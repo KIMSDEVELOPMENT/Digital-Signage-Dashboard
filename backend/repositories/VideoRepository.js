@@ -8,10 +8,11 @@ class VideoRepository {
        FROM videos v 
        JOIN branches b ON v.branch_id = b.id 
        JOIN locations l ON v.location_id = l.id 
-       WHERE v.branch_id = ? AND v.location_id = ?`,
+       WHERE v.branch_id = ? AND v.location_id = ?
+       ORDER BY v.play_order ASC, v.created_at ASC`,
       [branch_id, location_id]
     );
-    return rows[0] || null;
+    return rows;
   }
 
   async findById(id) {
@@ -39,28 +40,16 @@ class VideoRepository {
     return rows;
   }
 
-  async upsertVideo(data) {
+  async insertVideo(data) {
     const pool = getPool();
-    const { branch_id, location_id, title, file_path, original_name, file_size, duration, uploaded_by } = data;
+    const { branch_id, location_id, title, file_path, original_name, file_size, duration, uploaded_by, play_order } = data;
     
-    // Check if exists
-    const existing = await this.findByLocation(branch_id, location_id);
-    if (existing) {
-      await pool.query(
-        `UPDATE videos 
-         SET title = ?, file_path = ?, original_name = ?, file_size = ?, duration = ?, uploaded_by = ? 
-         WHERE id = ?`,
-        [title, file_path, original_name, file_size, duration, uploaded_by, existing.id]
-      );
-      return { id: existing.id, oldFilePath: existing.file_path };
-    } else {
-      const [result] = await pool.query(
-        `INSERT INTO videos (branch_id, location_id, title, file_path, original_name, file_size, duration, uploaded_by) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [branch_id, location_id, title, file_path, original_name, file_size, duration, uploaded_by]
-      );
-      return { id: result.insertId, oldFilePath: null };
-    }
+    const [result] = await pool.query(
+      `INSERT INTO videos (branch_id, location_id, title, file_path, original_name, file_size, duration, uploaded_by, play_order) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [branch_id, location_id, title, file_path, original_name, file_size, duration, uploaded_by, play_order || 1]
+    );
+    return { id: result.insertId };
   }
 
   async deleteById(id) {

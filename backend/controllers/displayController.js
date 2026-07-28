@@ -123,22 +123,23 @@ export const getScreenPlaylist = async (req, res) => {
       });
     }
 
-    // 5. Fetch Video if exists for this branch & location
+    // 5. Fetch Videos if exists for this branch & location
     const [videoQuery] = await pool.query(
-      `SELECT file_path, duration FROM videos WHERE branch_id = ? AND location_id = ?`,
+      `SELECT file_path, duration, play_order FROM videos WHERE branch_id = ? AND location_id = ? ORDER BY play_order ASC, created_at ASC`,
       [branch_id, location_id]
     );
 
-    const video = videoQuery.length > 0 ? {
-      url: videoQuery[0].file_path,
-      duration: videoQuery[0].duration
-    } : null;
+    const videos = videoQuery.map(v => ({
+      url: v.file_path,
+      duration: v.duration,
+      playOrder: v.play_order
+    }));
 
     res.json({
       branch: branch_name,
       location: location_name,
       steps,
-      video
+      videos
     });
 
   } catch (error) {

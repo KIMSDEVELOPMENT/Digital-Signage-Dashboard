@@ -17,7 +17,7 @@ export async function uploadVideo(req, res) {
     return res.status(400).json({ message: 'No video file uploaded.' });
   }
 
-  const { branch_id, location_id, title } = req.body;
+  const { branch_id, location_id, title, play_order } = req.body;
 
   if (!branch_id || !location_id) {
     if (req.file) fs.unlinkSync(req.file.path);
@@ -57,9 +57,9 @@ export async function uploadVideo(req, res) {
       return res.status(400).json({ message: 'Failed to process video duration. Ensure it is a valid video file.' });
     }
 
-    if (duration > 300) { // 300 seconds = 5 minutes
+    if (duration > 1200) { // 1200 seconds = 20 minutes
       if (req.file) fs.unlinkSync(req.file.path);
-      return res.status(400).json({ message: 'Video duration exceeds the 5-minute maximum limit.' });
+      return res.status(400).json({ message: 'Video duration exceeds the 20-minute maximum limit.' });
     }
 
     // Compression step
@@ -95,7 +95,7 @@ export async function uploadVideo(req, res) {
 
     // 4. Save to database
     const filePath = `/uploads/videos/${req.file.filename}`;
-    const result = await videoRepository.upsertVideo({
+    const result = await videoRepository.insertVideo({
       branch_id,
       location_id,
       title,
@@ -103,16 +103,9 @@ export async function uploadVideo(req, res) {
       original_name: req.file.originalname,
       file_size: req.file.size,
       duration: duration,
-      uploaded_by: req.user.id
+      uploaded_by: req.user.id,
+      play_order: play_order ? parseInt(play_order) : 1
     });
-
-    // 5. Delete old video if replaced
-    if (result.oldFilePath) {
-      const oldPath = path.join(process.cwd(), result.oldFilePath);
-      if (fs.existsSync(oldPath)) {
-        fs.unlinkSync(oldPath);
-      }
-    }
 
     notifyUpdate();
 
