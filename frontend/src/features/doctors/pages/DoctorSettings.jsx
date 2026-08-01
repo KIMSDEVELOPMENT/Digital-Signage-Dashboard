@@ -4,13 +4,14 @@ import { Search, Loader2, Save, X, Calendar } from 'lucide-react';
 import api from '../../../common/services/api';
 import toast from 'react-hot-toast';
 
-const DoctorSittings = () => {
+const DoctorSettings = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [doctors, setDoctors] = useState([]);
   const [loading, setLoading] = useState(false);
   
   const [selectedDoctor, setSelectedDoctor] = useState(null);
-  const [selectedDays, setSelectedDays] = useState([]);
+  const [selectedDays, setSelectedDays] = useState({ SSCC: [], PBMH: [] });
+  const [activeTab, setActiveTab] = useState('SSCC');
   const [saving, setSaving] = useState(false);
 
   const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
@@ -41,22 +42,40 @@ const DoctorSittings = () => {
 
   const handleSelectDoctor = (doc) => {
     setSelectedDoctor(doc);
+    setActiveTab('SSCC');
     if (doc.display_days) {
       try {
         const parsedDays = typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days;
-        setSelectedDays(Array.isArray(parsedDays) ? parsedDays : []);
+        if (Array.isArray(parsedDays)) {
+          setSelectedDays({ SSCC: parsedDays, PBMH: [] });
+        } else if (parsedDays && typeof parsedDays === 'object') {
+          setSelectedDays({
+            SSCC: parsedDays.SSCC || [],
+            PBMH: parsedDays.PBMH || []
+          });
+        } else {
+          setSelectedDays({ SSCC: [], PBMH: [] });
+        }
       } catch (e) {
-        setSelectedDays([]);
+        setSelectedDays({ SSCC: [], PBMH: [] });
       }
     } else {
-      setSelectedDays([]);
+      setSelectedDays({ SSCC: [], PBMH: [] });
     }
   };
 
   const toggleDay = (day) => {
-    setSelectedDays(prev => 
-      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
-    );
+    setSelectedDays(prev => {
+      const currentTabDays = prev[activeTab] || [];
+      const newTabDays = currentTabDays.includes(day) 
+        ? currentTabDays.filter(d => d !== day) 
+        : [...currentTabDays, day];
+      
+      return {
+        ...prev,
+        [activeTab]: newTabDays
+      };
+    });
   };
 
   const handleSave = async () => {
@@ -67,12 +86,12 @@ const DoctorSittings = () => {
         employee_id: selectedDoctor.employee_id,
         display_days: selectedDays
       });
-      toast.success('Sitting days saved successfully!');
+      toast.success('Settings saved successfully!');
       setSelectedDoctor(null);
       searchDoctors(searchQuery); // Refresh the list
     } catch (error) {
       console.error(error);
-      toast.error('Failed to save sitting days.');
+      toast.error('Failed to save settings.');
     } finally {
       setSaving(false);
     }
@@ -82,7 +101,7 @@ const DoctorSittings = () => {
     <div className="flex-1 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-200">Doctor Sitting Management</h1>
+          <h1 className="text-3xl font-bold text-slate-200">Doctor Settings Management</h1>
           <p className="text-slate-400 mt-1 text-lg">Manage display days for doctors on the digital signage.</p>
         </div>
       </div>
@@ -128,11 +147,32 @@ const DoctorSittings = () => {
                       try {
                         const days = typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days;
                         if (Array.isArray(days) && days.length > 0) {
-                          return days.map(d => (
-                            <span key={d} className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-bold">
-                              {d}
-                            </span>
-                          ));
+                          return (
+                            <div className="flex flex-wrap gap-1 items-center">
+                              <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-1 rounded">SSCC</span>
+                              {days.map(d => (
+                                <span key={d} className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold">{d}</span>
+                              ))}
+                            </div>
+                          );
+                        } else if (days && typeof days === 'object' && !Array.isArray(days)) {
+                          return (
+                            <div className="flex flex-col gap-1 w-full mt-1">
+                              {days.SSCC?.length > 0 && (
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-1 rounded">SSCC</span>
+                                  {days.SSCC.map(d => <span key={d} className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold">{d}</span>)}
+                                </div>
+                              )}
+                              {days.PBMH?.length > 0 && (
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-1 rounded">PBMH</span>
+                                  {days.PBMH.map(d => <span key={d} className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[9px] font-bold">{d}</span>)}
+                                </div>
+                              )}
+                              {(!days.SSCC?.length && !days.PBMH?.length) && <span className="text-xs text-slate-400 italic">No days assigned</span>}
+                            </div>
+                          );
                         }
                         return <span className="text-xs text-slate-400 italic">No days assigned</span>;
                       } catch(e) {
@@ -192,7 +232,22 @@ const DoctorSittings = () => {
               </div>
 
               <div className="p-6">
-                <p className="text-slate-300 mb-4">Select the days this doctor should be displayed on the screen:</p>
+                <div className="flex gap-2 mb-4 bg-slate-800/50 p-1 rounded-xl">
+                  <button 
+                    onClick={() => setActiveTab('SSCC')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'SSCC' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                  >
+                    SSCC Display
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('PBMH')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'PBMH' ? 'bg-sky-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                  >
+                    PBMH Display
+                  </button>
+                </div>
+                
+                <p className="text-slate-300 mb-4">Select the days this doctor should be displayed on the <strong className={activeTab === 'SSCC' ? 'text-emerald-400' : 'text-sky-400'}>{activeTab}</strong> screen:</p>
                 
                 <div className="grid grid-cols-2 gap-3">
                   {DAYS.map(day => (
@@ -200,9 +255,9 @@ const DoctorSittings = () => {
                       key={day}
                       onClick={() => toggleDay(day)}
                       className={`py-3 rounded-xl border-2 font-bold transition-all flex items-center justify-center gap-2
-                        ${selectedDays.includes(day) 
-                          ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400 shadow-sm' 
-                          : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-emerald-500/40 hover:text-slate-300'
+                        ${(selectedDays[activeTab] || []).includes(day) 
+                          ? activeTab === 'SSCC' ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400 shadow-sm' : 'border-sky-500 bg-sky-500/20 text-sky-400 shadow-sm'
+                          : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700 hover:text-slate-300'
                         }`}
                     >
                       {day}
@@ -241,4 +296,4 @@ const UserIcon = ({ name }) => (
   </span>
 );
 
-export default DoctorSittings;
+export default DoctorSettings;

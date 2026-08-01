@@ -48,7 +48,7 @@ const DashboardLayout = () => {
       visible: hasPermission('Duty Roster', 'read'),
     },
     {
-      name: 'Doctor Sittings',
+      name: 'Doctor Settings',
       path: '/sittings',
       icon: CalendarDays,
       visible: hasPermission('Duty Roster', 'read'),

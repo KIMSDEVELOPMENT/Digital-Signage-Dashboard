@@ -22,15 +22,15 @@ export const saveSitting = async (req, res) => {
       return res.status(400).json({ message: 'employee_id is required' });
     }
     
-    if (!Array.isArray(display_days)) {
-      return res.status(400).json({ message: 'display_days must be an array' });
+    if (typeof display_days !== 'object' || display_days === null) {
+      return res.status(400).json({ message: 'display_days must be an object or array' });
     }
 
     await sittingRepository.upsertSitting(employee_id, display_days);
     
-    res.json({ message: 'Sitting configuration saved successfully' });
+    res.json({ message: 'Settings configuration saved successfully' });
   } catch (error) {
-    console.error('Error saving sitting configuration:', error);
+    console.error('Error saving settings configuration:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

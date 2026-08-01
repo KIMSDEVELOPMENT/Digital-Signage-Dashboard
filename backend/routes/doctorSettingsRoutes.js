@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
-import { searchDoctors, saveSitting } from '../controllers/sittingController.js';
+import { searchDoctors, saveSitting } from '../controllers/doctorSettingsController.js';
 
 const router = express.Router();
 

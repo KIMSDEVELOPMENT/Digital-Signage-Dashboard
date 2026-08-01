@@ -84,6 +84,16 @@ const DisplayScreen = () => {
         .animate-marquee:hover {
           animation-play-state: paused;
         }
+        @keyframes light-sweep {
+          0% { transform: translateX(-50vw) skewX(-45deg) scaleX(1); opacity: 0; }
+          25% { opacity: 0.25; transform: translateX(0vw) skewX(-40deg) scaleX(1.2); }
+          50% { opacity: 0.1; transform: translateX(50vw) skewX(-45deg) scaleX(0.8); }
+          75% { opacity: 0.25; transform: translateX(100vw) skewX(-50deg) scaleX(1.1); }
+          100% { transform: translateX(150vw) skewX(-45deg) scaleX(1); opacity: 0; }
+        }
+        .animate-light-1 { animation: light-sweep 12s linear infinite; }
+        .animate-light-2 { animation: light-sweep 18s linear infinite 5s; }
+        .animate-light-3 { animation: light-sweep 24s linear infinite 11s; }
       `;
       document.head.appendChild(style);
       return () => document.head.removeChild(style);
@@ -359,10 +369,18 @@ const DisplayScreen = () => {
     <div className="h-screen w-screen flex flex-col font-sans text-slate-900 overflow-hidden relative bg-white">
       {/* Background Image fills the screen */}
       {(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) && (
-        <div
-          className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${bgImg})` }}
-        />
+        <>
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+            style={{ backgroundImage: `url(${bgImg})` }}
+          />
+          {/* Animated Light Sweep Background */}
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none mix-blend-screen">
+            <div className="absolute top-0 -bottom-32 w-[30vw] bg-gradient-to-r from-transparent via-white to-transparent opacity-0 blur-[50px] animate-light-1" />
+            <div className="absolute -top-32 bottom-0 w-[40vw] bg-gradient-to-r from-transparent via-white to-transparent opacity-0 blur-[60px] animate-light-2" />
+            <div className="absolute top-1/4 -bottom-1/4 w-[25vw] bg-gradient-to-r from-transparent via-white to-transparent opacity-0 blur-[40px] animate-light-3" />
+          </div>
+        </>
       )}
 
 
@@ -483,8 +501,15 @@ const DisplayScreen = () => {
                       <div className="flex justify-end gap-2 w-[30%]">
                         <div className="flex flex-wrap justify-end gap-1.5">
                           {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => {
-                            const parsedDays = doc.display_days ? (typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days) : [];
-                            const isActive = parsedDays.includes(day);
+                            let parsedDays = doc.display_days ? (typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days) : [];
+                            let branchDays = [];
+                            if (Array.isArray(parsedDays)) {
+                              branchDays = parsedDays;
+                            } else if (parsedDays && typeof parsedDays === 'object') {
+                              const currentBranch = branch ? branch.toUpperCase() : 'SSCC';
+                              branchDays = parsedDays[currentBranch] || [];
+                            }
+                            const isActive = branchDays.includes(day);
                             return (
                               <span 
                                 key={day} 
