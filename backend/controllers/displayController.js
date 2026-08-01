@@ -77,9 +77,10 @@ export const getScreenPlaylist = async (req, res) => {
 
       // Fetch Doctors scheduled for today (CURRENT_DATE) in those locations
       let doctorQuery = `
-        SELECT d.id, d.name, d.designation, d.photo_url, dept.name AS department_name, r.timing
+        SELECT d.id, d.name, d.designation, d.photo_url, dept.name AS department_name, r.timing, ds.display_days
         FROM roster r
         JOIN doctors d ON r.doctor_id = d.id
+        LEFT JOIN doctor_sittings ds ON d.employee_id = ds.employee_id
         JOIN doctor_assignments da ON da.doctor_id = d.id 
              AND da.branch_id = r.branch_id 
              AND da.location_id = r.location_id
@@ -94,7 +95,22 @@ export const getScreenPlaylist = async (req, res) => {
         queryParams.push(excludedDeptIds);
       }
 
-      doctorQuery += ` ORDER BY dept.name ASC, d.name ASC`;
+      doctorQuery += `
+        ORDER BY dept.name ASC, 
+        CASE UPPER(d.designation)
+          WHEN 'HOD' THEN 1
+          WHEN 'PROFESSOR' THEN 2
+          WHEN 'ASSOCIATE PROFESSOR' THEN 3
+          WHEN 'ASST. PROFESSOR' THEN 4
+          WHEN 'ASSISTANT PROFESSOR' THEN 4
+          WHEN 'SR. RESIDENT' THEN 5
+          WHEN 'SENIOR RESIDENT' THEN 5
+          WHEN 'JR. RESIDENT' THEN 6
+          WHEN 'JUNIOR RESIDENT' THEN 6
+          ELSE 99
+        END ASC, 
+        d.name ASC
+      `;
 
       const [doctorsData] = await pool.query(doctorQuery, queryParams);
 
@@ -112,7 +128,8 @@ export const getScreenPlaylist = async (req, res) => {
           name: doc.name,
           designation: doc.designation,
           timing: doc.timing,
-          photo_url: doc.photo_url
+          photo_url: doc.photo_url,
+          display_days: doc.display_days || null
         });
       }
 

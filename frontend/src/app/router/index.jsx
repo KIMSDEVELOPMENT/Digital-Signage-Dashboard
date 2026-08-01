@@ -13,6 +13,7 @@ const Location = lazy(() => import('../../features/locations/pages/Location'));
 const Admins = lazy(() => import('../../features/settings/pages/Admins'));
 const AdminConfig = lazy(() => import('../../features/settings/pages/AdminConfig'));
 const Roster = lazy(() => import('../../features/doctors/pages/Roster'));
+const DoctorSittings = lazy(() => import('../../features/doctors/pages/DoctorSittings'));
 const VideoManagement = lazy(() => import('../../features/videos/pages/VideoManagement'));
 const DisplayScreen = lazy(() => import('../../features/display/pages/DisplayScreen'));
 const Error404 = lazy(() => import('../../features/error/Error404'));
@@ -48,6 +49,7 @@ const AppRoutes = () => {
             </Route>
             <Route element={<ModuleRoute moduleName="Duty Roster" />}>
               <Route path="/roster" element={<Roster />} />
+              <Route path="/sittings" element={<DoctorSittings />} />
             </Route>
 
             <Route path="/videos" element={

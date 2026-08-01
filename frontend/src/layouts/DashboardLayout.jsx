@@ -48,6 +48,12 @@ const DashboardLayout = () => {
       visible: hasPermission('Duty Roster', 'read'),
     },
     {
+      name: 'Doctor Sittings',
+      path: '/sittings',
+      icon: CalendarDays,
+      visible: hasPermission('Duty Roster', 'read'),
+    },
+    {
       name: 'Video Management',
       path: '/videos',
       icon: Video,

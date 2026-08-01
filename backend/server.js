@@ -18,6 +18,7 @@ import configRoutes from './routes/configRoutes.js';
 import displayRoutes from './routes/displayRoutes.js';
 import videoRoutes from './routes/videoRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
+import sittingRoutes from './routes/sittingRoutes.js';
 
 dotenv.config();
 
@@ -51,6 +52,7 @@ app.use('/api/config', configRoutes);
 app.use('/api/display', displayRoutes);
 app.use('/api/videos', videoRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/sittings', sittingRoutes);
 
 // Root route
 app.get('/', (req, res) => {

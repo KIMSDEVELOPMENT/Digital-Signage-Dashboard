@@ -30,9 +30,9 @@ const LiveClock = () => {
   const dateString = time.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
-    <div className="w-1/5 text-right flex flex-col items-end text-[#1c4587] justify-center">
-      <p className="text-3xl font-medium whitespace-nowrap" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{dateString}</p>
-      <p className="text-7xl font-bold mt-1 tracking-tight" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{timeString}</p>
+    <div className="w-1/5 text-right flex flex-col items-end text-white justify-center">
+      <p className="text-3xl font-medium whitespace-nowrap drop-shadow-md" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{dateString}</p>
+      <p className="text-7xl font-bold mt-1 tracking-tight drop-shadow-md" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{timeString}</p>
     </div>
   );
 };
@@ -338,20 +338,20 @@ const DisplayScreen = () => {
   const FooterContent = () => (
     <>
       <div className="flex items-center gap-3">
-        <Ambulance className="w-8 h-8 text-pink-200" fill="currentColor" />
+        <Ambulance className="w-8 h-8 text-[#fbbd61]" fill="currentColor" />
         <span>AMBULANCE: 0674-7111333 / 7440 070010</span>
       </div>
-      <span className="text-white/50 font-light mx-8">|</span>
+      <span className="text-[#fbbd61]/70 font-light mx-8">|</span>
       <div className="flex items-center gap-3">
-        <PhoneCall className="w-7 h-7 text-pink-200" fill="currentColor" />
+        <PhoneCall className="w-7 h-7 text-[#fbbd61]" fill="currentColor" />
         <span>HELLO KIMS: 0674 2304400 / 7111000</span>
       </div>
-      <span className="text-white/50 font-light mx-8">|</span>
+      <span className="text-[#fbbd61]/70 font-light mx-8">|</span>
       <div className="flex items-center gap-3">
-        <PhoneCall className="w-7 h-7 text-pink-200" fill="currentColor" />
+        <PhoneCall className="w-7 h-7 text-[#fbbd61]" fill="currentColor" />
         <span>24X7 EMERGENCY: 0674 2725228 / 7105354</span>
       </div>
-      <span className="text-white/50 font-light mx-8">|</span>
+      <span className="text-[#fbbd61]/70 font-light mx-8">|</span>
     </>
   );
 
@@ -374,13 +374,13 @@ const DisplayScreen = () => {
           <div className="w-[10%]"></div>
 
           {/* Center: Banner Logo */}
-          <div className="flex-1 flex items-center justify-center px-4">
+          <div className="flex-1 flex items-center justify-center px-4 drop-shadow-md">
             {isDental ? (
-              <img src={kidsLogo} alt="KIDS Banner" className="w-full max-w-[1200px] max-h-[180px] object-contain" />
+              <img src={kidsLogo} alt="KIDS Banner" className="w-full max-w-[1200px] max-h-[180px] object-contain brightness-0 invert" />
             ) : isSuperSpeciality ? (
-              <img src={kssccLogo} alt="KSSCC Banner" className="w-full max-w-[1200px] max-h-[180px] object-contain" />
+              <img src={kssccLogo} alt="KSSCC Banner" className="w-full max-w-[1200px] max-h-[180px] object-contain brightness-0 invert" />
             ) : (
-              <img src={kimsLogo} alt="KIMS Banner" className="w-full max-w-[1200px] max-h-[180px] object-contain" />
+              <img src={kimsLogo} alt="KIMS Banner" className="w-full max-w-[1200px] max-h-[180px] object-contain brightness-0 invert" />
             )}
           </div>
 
@@ -389,12 +389,6 @@ const DisplayScreen = () => {
         </header>
       )}
 
-      {/* Title Bar */}
-      {(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) && (
-        <div className="w-full bg-gradient-to-r from-transparent via-[#4281b8] to-transparent text-white text-center py-2 z-10 shrink-0 opacity-95">
-          <h2 className="text-[2.2rem] font-bold tracking-widest uppercase" style={{ fontFamily: '"Times New Roman", Times, serif', textShadow: '1px 1px 3px rgba(0,0,0,0.3)' }}>OPD SCHEDULED</h2>
-        </div>
-      )}
 
       {/* Main Content Area */}
       <main className={`flex-1 flex flex-col z-10 overflow-hidden min-h-0 ${(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) ? 'px-12 py-6' : ''}`}>
@@ -434,13 +428,26 @@ const DisplayScreen = () => {
                 transition={{ duration: 0.5 }}
                 className="flex-1 flex flex-col"
               >
-                {/* Department Header (e.g. • NEUROLOGY •) */}
-                <div className="text-center mb-6 w-full max-w-4xl mx-auto flex flex-col items-center">
-                  <div className="w-full border-t-[1.5px] border-[#1c4587]/30 mb-2"></div>
-                  <h3 className="text-[2rem] font-bold text-[#1c4587] tracking-widest uppercase" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
-                    • {currentPage.department} •
-                  </h3>
-                  <div className="w-full border-t-[1.5px] border-[#1c4587]/30 mt-2"></div>
+                {/* Department Header */}
+                <div className="text-center mb-8 w-full max-w-[85%] mx-auto flex items-center justify-center gap-4">
+                  {/* Left Line */}
+                  <div className="flex-1 flex items-center">
+                    <div className="w-3 h-3 rounded-full bg-[#fbbd61] mr-2 shrink-0"></div>
+                    <div className="w-full h-[3px] bg-[#fbbd61]"></div>
+                  </div>
+                  
+                  {/* Center Pill */}
+                  <div className="bg-[#fbbd61] px-8 py-1.5 rounded-full shadow-md shrink-0">
+                    <h3 className="text-[1.8rem] font-bold text-[#004d40] tracking-wide" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+                      Department of {currentPage.department}
+                    </h3>
+                  </div>
+
+                  {/* Right Line */}
+                  <div className="flex-1 flex items-center">
+                    <div className="w-full h-[3px] bg-[#fbbd61]"></div>
+                    <div className="w-3 h-3 rounded-full bg-[#fbbd61] ml-2 shrink-0"></div>
+                  </div>
                 </div>
 
                 {/* List of Doctors */}
@@ -448,29 +455,50 @@ const DisplayScreen = () => {
                   {currentPage.doctors.map((doc, docIdx) => (
                     <div
                       key={docIdx}
-                      className="flex items-center justify-between bg-white/30 backdrop-blur-sm rounded-2xl border border-white/20 px-8 py-6"
+                      className="flex items-center bg-white/10 backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.2)] rounded-2xl border border-white/20 px-8 py-6"
                     >
-                      <div className="flex items-center gap-8">
-                        <div className="w-32 h-32 rounded-full overflow-hidden bg-white border-[3px] border-[#a0c8f0] shadow-sm flex-shrink-0">
+                      <div className="flex items-center gap-8 w-[45%]">
+                        <div className="w-36 h-36 rounded-full overflow-hidden bg-white border-[4px] border-[#fbbd61] shadow-md flex-shrink-0">
                           {doc.photo_url ? (
-                            <img src={getFullPhotoUrl(doc.photo_url)} alt={doc.name} className="w-full h-full object-cover" />
+                            <img src={getFullPhotoUrl(doc.photo_url)} alt={doc.name} className="w-full h-full object-contain p-1 bg-white rounded-full" />
                           ) : (
                             <div className="w-full h-full bg-[#1c4587]/10 flex items-center justify-center">
-                              <span className="text-[#1c4587] font-bold text-5xl">{doc.name.charAt(0)}</span>
+                              <span className="text-[#1c4587] font-bold text-6xl">{doc.name.charAt(0)}</span>
                             </div>
                           )}
                         </div>
-                        <div className="flex flex-col">
-                          <h3 className="text-3xl font-bold text-[#103061] tracking-wide" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+                        <div className="flex flex-col drop-shadow-md">
+                          <h3 className="text-3xl font-bold text-white tracking-wide leading-tight" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
                             {doc.name.replace(/^Dr\.?\s*/i, 'Dr. ').replace(/(Dr\.\s*)(.*)/i, (_, prefix, name) => prefix + name.toUpperCase())}
                           </h3>
-                          <p className="text-lg text-[#4a6b8c] font-semibold uppercase tracking-widest mt-1">{doc.designation}</p>
+                          <p className="text-xl font-bold text-[#fbbd61] uppercase tracking-widest mt-1 leading-snug">{doc.designation}</p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 text-[#103061] px-6 py-2 rounded-lg bg-transparent font-bold text-4xl" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
-                        <Clock className="w-8 h-8 opacity-70" />
+                      <div className="flex items-center justify-start gap-3 text-[#fbbd61] px-6 py-2 rounded-lg bg-transparent font-bold text-4xl w-[25%] -ml-12 drop-shadow-md" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+                        <Clock className="w-9 h-9 opacity-90" />
                         {doc.timing}
+                      </div>
+
+                      <div className="flex justify-end gap-2 w-[30%]">
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => {
+                            const parsedDays = doc.display_days ? (typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days) : [];
+                            const isActive = parsedDays.includes(day);
+                            return (
+                              <span 
+                                key={day} 
+                                className={`px-2.5 py-1.5 rounded-lg text-base border-2 uppercase tracking-wide transition-all duration-300 shadow-sm ${
+                                  isActive 
+                                    ? 'bg-[#fbbd61] text-[#004d40] font-extrabold border-[#fbbd61]' 
+                                    : 'bg-transparent text-white/40 font-semibold border-[#fbbd61]/40'
+                                }`}
+                              >
+                                {day}
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -496,7 +524,7 @@ const DisplayScreen = () => {
 
       {/* Footer */}
       {(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) && (
-        <footer className="bg-[#5993df] text-white py-5 shrink-0 shadow-[0_-4px_15px_rgba(0,0,0,0.1)] z-10 overflow-hidden flex items-center">
+        <footer className="bg-black/40 backdrop-blur-md border-t border-white/10 text-white py-5 shrink-0 shadow-[0_-4px_15px_rgba(0,0,0,0.2)] z-10 overflow-hidden flex items-center">
           <div className="flex items-center w-max animate-marquee text-2xl font-bold tracking-wide whitespace-nowrap">
             <FooterContent />
             <FooterContent />
