@@ -86,14 +86,14 @@ const DisplayScreen = () => {
         }
         @keyframes light-sweep {
           0% { transform: translateX(-50vw) skewX(-45deg) scaleX(1); opacity: 0; }
-          25% { opacity: 0.25; transform: translateX(0vw) skewX(-40deg) scaleX(1.2); }
-          50% { opacity: 0.1; transform: translateX(50vw) skewX(-45deg) scaleX(0.8); }
-          75% { opacity: 0.25; transform: translateX(100vw) skewX(-50deg) scaleX(1.1); }
+          25% { opacity: 0.5; transform: translateX(0vw) skewX(-40deg) scaleX(1.2); }
+          50% { opacity: 0.2; transform: translateX(50vw) skewX(-45deg) scaleX(0.8); }
+          75% { opacity: 0.5; transform: translateX(100vw) skewX(-50deg) scaleX(1.1); }
           100% { transform: translateX(150vw) skewX(-45deg) scaleX(1); opacity: 0; }
         }
-        .animate-light-1 { animation: light-sweep 12s linear infinite; }
-        .animate-light-2 { animation: light-sweep 18s linear infinite 5s; }
-        .animate-light-3 { animation: light-sweep 24s linear infinite 11s; }
+        .animate-light-1 { animation: light-sweep 8s linear infinite; }
+        .animate-light-2 { animation: light-sweep 12s linear infinite 3s; }
+        .animate-light-3 { animation: light-sweep 16s linear infinite 6s; }
       `;
       document.head.appendChild(style);
       return () => document.head.removeChild(style);
@@ -207,30 +207,30 @@ const DisplayScreen = () => {
             // No videos: Just run the loop once without videos
             if (combinedPages.length > 0) allPages.push(...combinedPages);
             else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
-            
+
             allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
-            
+
             if (locationPages.length > 0) allPages.push(...locationPages);
             else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
-            
+
             allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
           } else {
             // Pair up videos and loop the sequence
             for (let i = 0; i < allBranchVideos.length; i += 2) {
               const v1 = allBranchVideos[i];
-              const v2 = allBranchVideos[i+1];
+              const v2 = allBranchVideos[i + 1];
 
               // Slot 1: After Combined
               if (combinedPages.length > 0) allPages.push(...combinedPages);
               else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
-              
+
               allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
               if (v1) allPages.push({ isVideo: true, duration: v1.duration, videoUrl: v1.url });
 
               // Slot 2: After Location
               if (locationPages.length > 0) allPages.push(...locationPages);
               else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
-              
+
               allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
               if (v2) allPages.push({ isVideo: true, duration: v2.duration, videoUrl: v2.url });
             }
@@ -409,7 +409,7 @@ const DisplayScreen = () => {
 
 
       {/* Main Content Area */}
-      <main className={`flex-1 flex flex-col z-10 overflow-hidden min-h-0 ${(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) ? 'px-12 py-6' : ''}`}>
+      <main className={`flex-1 flex flex-col z-10 overflow-hidden min-h-0 ${(!currentPage || (!currentPage.isBanner && !currentPage.isVideo)) ? 'px-14 py-8' : ''}`}>
         {currentPage && currentPage.isVideo ? (
           <div className="flex-1 flex items-center justify-center overflow-hidden bg-black h-full w-full">
             <video
@@ -453,7 +453,7 @@ const DisplayScreen = () => {
                     <div className="w-3 h-3 rounded-full bg-[#fbbd61] mr-2 shrink-0"></div>
                     <div className="w-full h-[3px] bg-[#fbbd61]"></div>
                   </div>
-                  
+
                   {/* Center Pill */}
                   <div className="bg-[#fbbd61] px-8 py-1.5 rounded-full shadow-md shrink-0">
                     <h3 className="text-[1.8rem] font-bold text-[#004d40] tracking-wide" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
@@ -473,7 +473,7 @@ const DisplayScreen = () => {
                   {currentPage.doctors.map((doc, docIdx) => (
                     <div
                       key={docIdx}
-                      className="flex items-center bg-white/10 backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.2)] rounded-2xl border border-white/20 px-8 py-6"
+                      className="flex items-center bg-gradient-to-b from-white/20 to-transparent backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.1)] rounded-3xl border border-white/20 px-8 py-5 w-full"
                     >
                       <div className="flex items-center gap-8 w-[45%]">
                         <div className="w-36 h-36 rounded-full overflow-hidden bg-white border-[4px] border-[#fbbd61] shadow-md flex-shrink-0">
@@ -511,13 +511,12 @@ const DisplayScreen = () => {
                             }
                             const isActive = branchDays.includes(day);
                             return (
-                              <span 
-                                key={day} 
-                                className={`px-2.5 py-1.5 rounded-lg text-base border-2 uppercase tracking-wide transition-all duration-300 shadow-sm ${
-                                  isActive 
-                                    ? 'bg-[#fbbd61] text-[#004d40] font-extrabold border-[#fbbd61]' 
-                                    : 'bg-transparent text-white/40 font-semibold border-[#fbbd61]/40'
-                                }`}
+                              <span
+                                key={day}
+                                className={`px-2.5 py-1.5 rounded-lg text-base border-2 uppercase tracking-wide transition-all duration-300 shadow-sm ${isActive
+                                  ? 'bg-[#fbbd61] text-[#004d40] font-extrabold border-[#fbbd61]'
+                                  : 'bg-transparent text-white/40 font-semibold border-[#fbbd61]/40'
+                                  }`}
                               >
                                 {day}
                               </span>
