@@ -28,14 +28,25 @@ async function resolveLocation(branch, locParam) {
 }
 
 export async function downloadTemplate(req, res) {
-  const { branch } = req.query;
+  const { branch, date } = req.query;
   if (!branch) {
     return res.status(400).json({ message: 'Branch parameter is required.' });
   }
 
+  let dateFormatted = '';
+  if (date) {
+    // Format YYYY-MM-DD to DD/MM/YYYY for the Excel template
+    const parts = date.split('-');
+    if (parts.length === 3) {
+      dateFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
+    } else {
+      dateFormatted = date;
+    }
+  }
+
   try {
     const wsSchedule = xlsx.utils.json_to_sheet([
-      { 'Date': '', 'Site Name': branch, 'Block Name': '', 'Department Name': '', 'Doctor Name': '' }
+      { 'Date': dateFormatted, 'Site Name': branch, 'Block Name': '', 'Department Name': '', 'Doctor Name': '' }
     ], {
       header: ['Date', 'Site Name', 'Block Name', 'Department Name', 'Doctor Name'],
       skipHeader: false
@@ -60,13 +71,24 @@ export async function previewRoster(req, res) {
     return res.status(400).json({ message: 'No file uploaded.' });
   }
 
-  const { branch } = req.query;
+  const { branch, date } = req.query;
   if (!branch) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     return res.status(400).json({ message: 'Branch parameter is required.' });
   }
 
   try {
+    // Check if roster already exists for this branch and date
+    if (date) {
+      const existingRoster = await rosterRepository.findRosterByDate({ branch, date });
+      if (existingRoster && existingRoster.length > 0) {
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        return res.status(400).json({ 
+          message: 'A roster has already been uploaded for this date. Please modify or delete existing entries manually.' 
+        });
+      }
+    }
+
     const workbook = xlsx.readFile(req.file.path);
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
@@ -217,6 +239,11 @@ export async function previewRoster(req, res) {
           } else {
             dateStr = d.toISOString().split('T')[0];
           }
+        }
+        
+        // Mismatch validation
+        if (date && dateStr && dateStr !== date) {
+          errors.push(`Row ${rowNum}: Date in excel '${dateStr}' does not match the selected target date '${date}'.`);
         }
       }
 

@@ -60,6 +60,12 @@ const DashboardLayout = () => {
       icon: Video,
       visible: true,
     },
+    {
+      name: 'Doctor Shuffling',
+      path: '/departments',
+      icon: Layers,
+      visible: user?.role !== 'super_admin',
+    },
   ];
 
   // Super Admin only menu items

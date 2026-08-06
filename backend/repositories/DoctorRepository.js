@@ -14,7 +14,8 @@ export class DoctorRepository {
           'location_id', da.location_id,
           'location_name', l.name,
           'department_id', da.department_id,
-          'department_name', dept.name
+          'department_name', dept.name,
+          'shift_time', da.shift_time
         )
       ) AS assignments
       FROM doctors doc
@@ -238,9 +239,9 @@ export class DoctorRepository {
       
       // Insert new ones if any
       if (assignments && assignments.length > 0) {
-        const values = assignments.map(a => [doctorId, a.branch_id, a.location_id, a.department_id]);
+        const values = assignments.map(a => [doctorId, a.branch_id, a.location_id, a.department_id, a.shift_time || null]);
         await connection.query(
-          'INSERT INTO doctor_assignments (doctor_id, branch_id, location_id, department_id) VALUES ?',
+          'INSERT INTO doctor_assignments (doctor_id, branch_id, location_id, department_id, shift_time) VALUES ?',
           [values]
         );
       }

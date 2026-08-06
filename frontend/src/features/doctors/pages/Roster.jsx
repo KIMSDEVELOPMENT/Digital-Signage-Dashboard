@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../app/context/AuthContext';
 import api from '../../../common/services/api';
 import { 
@@ -24,6 +24,7 @@ import { toast } from 'react-hot-toast';
 const Roster = () => {
   const { user, hasPermission, branches, branchLocations, getAssignedLocations } = useAuth();
   const assignedLocs = getAssignedLocations();
+  const dateInputRef = useRef(null);
   
   // Determine allowed branches & locations for dropdown selection
   const allowedBranches = user.role === 'super_admin' 
@@ -35,6 +36,15 @@ const Roster = () => {
   const [selectedLocation, setSelectedLocation] = useState('');
   const [availableLocations, setAvailableLocations] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isPastDate = selectedDate < todayStr;
+
+  const formattedDateText = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
   
   // Edit State
   const [editingRosterId, setEditingRosterId] = useState(null);
@@ -225,7 +235,7 @@ const Roster = () => {
     const loadToast = toast.loading('Downloading template...');
     try {
       const response = await api.get(`/roster/template`, {
-        params: { branch: selectedBranch },
+        params: { branch: selectedBranch, date: selectedDate },
         responseType: 'blob'
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -268,7 +278,7 @@ const Roster = () => {
 
     try {
       // 1. Preview/Validate
-      const res = await api.post(`/roster/preview?branch=${selectedBranch}`, formData, {
+      const res = await api.post(`/roster/preview?branch=${selectedBranch}&date=${selectedDate}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const { previewData } = res.data;
@@ -316,9 +326,9 @@ const Roster = () => {
           <h3 className="font-heading font-semibold text-white">Target Display Area</h3>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-end gap-4 max-w-xl">
+        <div className="flex flex-col sm:flex-row items-end gap-4 max-w-3xl">
           {/* Branch select */}
-          <div className="space-y-1.5 flex-1 w-full max-w-[200px]">
+          <div className="space-y-1.5 flex-1 w-full max-w-[180px]">
             <label className="text-xs font-semibold text-slate-300 block">BRANCH</label>
             <select
               value={selectedBranch}
@@ -332,15 +342,54 @@ const Roster = () => {
             </select>
           </div>
 
+          {/* Formatted Date Display */}
           <div className="space-y-1.5 flex-1 w-full max-w-[200px]">
-            <label className="text-xs font-semibold text-slate-300 block">DATE</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-300 block">SCHEDULE DATE</label>
+              {selectedDate !== todayStr && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(todayStr)}
+                  className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+                >
+                  Set Today
+                </button>
+              )}
+            </div>
+            <div className="px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 text-slate-200 font-semibold flex items-center justify-between h-[42px]">
+              <span className="truncate">{formattedDateText}</span>
+            </div>
+          </div>
+
+          {/* Calendar Button (Between Date Display & Download Template) */}
+          <div className="relative">
             <input
+              ref={dateInputRef}
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl text-sm bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 cursor-pointer"
+              className="sr-only opacity-0 w-0 h-0 absolute"
             />
+            <button
+              type="button"
+              onClick={() => {
+                if (dateInputRef.current) {
+                  if (dateInputRef.current.showPicker) {
+                    dateInputRef.current.showPicker();
+                  } else {
+                    dateInputRef.current.click();
+                  }
+                }
+              }}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-900 hover:bg-slate-800 border border-slate-700 text-emerald-400 flex items-center gap-2 cursor-pointer h-[42px] transition-colors w-full sm:w-auto justify-center flex-shrink-0"
+              title="Select Date from Calendar"
+            >
+              <CalendarDays className="w-4 h-4 text-emerald-400" />
+              Select Date
+            </button>
           </div>
+
+          {/* Download Template */}
           {selectedBranch && (
             <button
               onClick={downloadRosterTemplate}
@@ -363,7 +412,12 @@ const Roster = () => {
                 <h3 className="font-heading font-semibold text-white">Upload Spreadsheet</h3>
               </div>
 
-              {hasPermission('Duty Roster', 'read') ? (
+              {isPastDate ? (
+                <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                  <span>Viewing Past Roster (Read Only). Spreadsheet uploading is disabled for past dates.</span>
+                </div>
+              ) : hasPermission('Duty Roster', 'read') ? (
                   <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-800 hover:border-emerald-500/50 rounded-2xl bg-slate-950/40 cursor-pointer group transition-all duration-200">
                     <UploadCloud className="w-10 h-10 text-slate-500 group-hover:text-emerald-400 transition-colors mb-3" />
                     <p className="text-sm font-semibold text-slate-300 text-center">
@@ -422,7 +476,12 @@ const Roster = () => {
               </div>
 
               {/* Manual Entry Form */}
-              {hasPermission('Duty Roster', 'read') && (
+              {isPastDate ? (
+                <div className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/40 text-slate-400 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Roster entries for past dates are read-only and cannot be added or modified.</span>
+                </div>
+              ) : hasPermission('Duty Roster', 'read') && (
                 <form onSubmit={handleAddManualEntry} className="flex flex-col sm:flex-row items-end gap-3 bg-slate-900/40 p-4 rounded-xl border border-slate-800">
                   {user?.role === 'super_admin' && (
                     <div className="w-full sm:w-32 md:w-40 space-y-1.5 shrink-0">
@@ -515,7 +574,7 @@ const Roster = () => {
                         <th className="px-4 py-3">Employee ID</th>
                         <th className="px-4 py-3">Department</th>
                         <th className="px-4 py-3">Shift Timing</th>
-                        {hasPermission('Duty Roster', 'read') && <th className="px-4 py-3 text-right">Actions</th>}
+                        {hasPermission('Duty Roster', 'read') && !isPastDate && <th className="px-4 py-3 text-right">Actions</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-850/30">
@@ -577,7 +636,7 @@ const Roster = () => {
                               item.timing
                             )}
                           </td>
-                          {hasPermission('Duty Roster', 'read') && (
+                          {hasPermission('Duty Roster', 'read') && !isPastDate && (
                             <td className="px-4 py-3 text-right">
                               <div className="flex items-center justify-end gap-1">
                                 {editingRosterId !== item.roster_id && (

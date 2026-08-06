@@ -222,7 +222,7 @@ export async function updateDepartmentDesignations(req, res) {
   try {
     const pool = getPool();
     await pool.query('DELETE FROM department_designations WHERE department_id = ?', [id]);
-    
+
     if (designations && designations.length > 0) {
       for (let i = 0; i < designations.length; i++) {
         await pool.query(

@@ -270,15 +270,15 @@ export async function downloadDoctorTemplate(req, res) {
   try {
     const wb = xlsx.utils.book_new();
     const ws = xlsx.utils.aoa_to_sheet([
-      ['CLINICIAN', 'EMPLOYEE ID', 'TITLE / DESIGNATION', 'DEPARTMENTS', 'BRANCHES', 'LOCATIONS', 'AVAILABLE DAYS'],
-      ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'PBMH', 'A BLOCK', 'MON, TUE, WED, THU, FRI, SAT'],
-      ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'SSCC', 'KSS', 'MON, TUE, WED, THU, FRI, SAT'],
-      ['Dr. JANE SMITH', '002', 'Cardiologist', 'Cardiology', 'PBMH', 'B BLOCK', 'MON, WED, FRI']
+      ['CLINICIAN', 'EMPLOYEE ID', 'TITLE / DESIGNATION', 'DEPARTMENTS', 'BRANCHES', 'LOCATIONS', 'AVAILABLE DAYS', 'SHIFT TIME'],
+      ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'PBMH', 'A BLOCK', 'MON, TUE, WED, THU, FRI, SAT', '10:00 AM - 02:00 PM'],
+      ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'SSCC', 'KSS', 'MON, TUE, WED, THU, FRI, SAT', '04:00 PM - 08:00 PM'],
+      ['Dr. JANE SMITH', '002', 'Cardiologist', 'Cardiology', 'PBMH', 'B BLOCK', 'MON, WED, FRI', '09:00 AM - 05:00 PM']
     ]);
     
     // Auto-size columns slightly
     const wscols = [
-      {wch: 25}, {wch: 15}, {wch: 25}, {wch: 20}, {wch: 20}, {wch: 20}, {wch: 30}
+      {wch: 25}, {wch: 15}, {wch: 25}, {wch: 20}, {wch: 20}, {wch: 20}, {wch: 30}, {wch: 25}
     ];
     ws['!cols'] = wscols;
 
@@ -346,6 +346,7 @@ export async function uploadBulkDoctors(req, res) {
       const departmentName = row['DEPARTMENTS']?.toString().trim();
       const branchName = row['BRANCHES']?.toString().trim();
       const locationName = row['LOCATIONS']?.toString().trim();
+      const rawShiftTime = (row['SHIFT TIME'] || row['TIMING'])?.toString().trim();
 
       if (!name || !empId || !designation || !departmentName || !branchName || !locationName) {
         errorCount++;
@@ -434,11 +435,11 @@ export async function uploadBulkDoctors(req, res) {
         // If same branch and location, check if duplicate exact assignment
         const exists = doc.assignments.some(a => a.branch_id === branchId && a.location_id === locId && a.department_id === deptId);
         if (!exists) {
-          doc.assignments.push({ branch_id: branchId, location_id: locId, department_id: deptId });
+          doc.assignments.push({ branch_id: branchId, location_id: locId, department_id: deptId, shift_time: rawShiftTime || null });
         }
       } else {
         // Different branch (e.g. PBMH then SSCC) -> ALLOWED!
-        doc.assignments.push({ branch_id: branchId, location_id: locId, department_id: deptId });
+        doc.assignments.push({ branch_id: branchId, location_id: locId, department_id: deptId, shift_time: rawShiftTime || null });
       }
     }
 
@@ -449,7 +450,23 @@ export async function uploadBulkDoctors(req, res) {
       // Check if exists
       const existing = await doctorRepository.findByEmployeeId(empId);
       if (existing) {
-        // Update existing doctor with updated assignments and master details
+        // Find which branches are in the new upload
+        const newBranchIds = [...new Set(docData.assignments.map(a => a.branch_id))];
+        
+        // Keep existing assignments if their branch_id is NOT in the new upload
+        const preservedAssignments = (existing.assignments || [])
+          .filter(ea => !newBranchIds.includes(ea.branch_id))
+          .map(ea => ({
+            branch_id: ea.branch_id,
+            location_id: ea.location_id,
+            department_id: ea.department_id,
+            shift_time: ea.shift_time || null
+          }));
+        
+        // Combine preserved assignments with the new ones
+        const mergedAssignments = [...preservedAssignments, ...docData.assignments];
+
+        // Update existing doctor with updated master details
         await doctorRepository.updateDoctor(existing.id, {
           employee_id: docData.employee_id,
           name: docData.name,
@@ -457,7 +474,7 @@ export async function uploadBulkDoctors(req, res) {
           status: docData.status,
           photo_url: existing.photo_url,
         });
-        await doctorRepository.syncAssignments(existing.id, docData.assignments);
+        await doctorRepository.syncAssignments(existing.id, mergedAssignments);
       } else {
         // Create new doctor
         const newId = await doctorRepository.createDoctor({

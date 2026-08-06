@@ -58,9 +58,7 @@ const AppRoutes = () => {
                 <VideoManagement />
               </Suspense>
             } />
-            <Route element={<ModuleRoute moduleName="Department" />}>
-              <Route path="/departments" element={<Department />} />
-            </Route>
+            <Route path="/departments" element={<Department />} />
             
             {/* Super Admin Only Routes */}
             <Route element={<SuperAdminRoute />}>

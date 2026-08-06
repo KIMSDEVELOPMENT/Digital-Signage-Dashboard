@@ -54,6 +54,7 @@ const Doctor = () => {
   const [tempBranch, setTempBranch] = useState('');
   const [tempLocation, setTempLocation] = useState('');
   const [tempDept, setTempDept] = useState('');
+  const [tempShiftTime, setTempShiftTime] = useState('');
 
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
@@ -251,6 +252,7 @@ const Doctor = () => {
     setTempBranch('');
     setTempLocation('');
     setTempDept('');
+    setTempShiftTime('');
     setCropModalOpen(false);
     setTempImageSrc(null);
   };
@@ -259,6 +261,46 @@ const Doctor = () => {
     const newAssignments = [...formData.assignments];
     newAssignments.splice(index, 1);
     setFormData({ ...formData, assignments: newAssignments });
+  };
+
+  const handleAddAssignmentClick = () => {
+    if (!tempBranch || !tempLocation || !tempDept) {
+      toast.error('Please select Branch, Location, and Department.');
+      return;
+    }
+    
+    const did = parseInt(tempDept, 10);
+    const lid = parseInt(tempLocation, 10);
+    const bid = parseInt(tempBranch, 10);
+    
+    const isDuplicate = formData.assignments.some(a => a.branch_id === bid && a.location_id === lid && a.department_id === did);
+    if (isDuplicate) {
+      toast.error('This assignment is already added.');
+      return;
+    }
+
+    const existingBlockInBranch = formData.assignments.find(a => a.branch_id === bid && a.location_id !== lid);
+    if (existingBlockInBranch) {
+      toast.error(`Doctor is already assigned to block ${existingBlockInBranch.location_name} in this branch. Cannot assign to multiple blocks in the same branch.`);
+      return;
+    }
+
+    const branchName = branches.find(b => b.id === bid)?.name;
+    const locName = locations.find(l => l.id === lid)?.name;
+    const deptName = departments.find(d => d.id === did)?.name;
+    
+    setFormData({
+      ...formData,
+      assignments: [...formData.assignments, { 
+        branch_id: bid, location_id: lid, department_id: did, 
+        branch_name: branchName, location_name: locName, department_name: deptName,
+        shift_time: tempShiftTime.trim()
+      }]
+    });
+    setTempBranch('');
+    setTempLocation('');
+    setTempDept('');
+    setTempShiftTime('');
   };
 
   const handleAddDoctor = async (e) => {
@@ -521,7 +563,12 @@ const Doctor = () => {
               ) : doctors.length > 0 ? (
                 doctors.map((doc) => {
                   const depts = [...new Set((doc.assignments || []).map(a => a.department_name))].filter(Boolean);
-                  const branches = [...new Set((doc.assignments || []).map(a => a.branch_name))].filter(Boolean);
+                  const branchAssignments = [];
+                  (doc.assignments || []).forEach(a => {
+                    if (a.branch_name && !branchAssignments.some(ba => ba.branch === a.branch_name && ba.time === a.shift_time)) {
+                      branchAssignments.push({ branch: a.branch_name, time: a.shift_time });
+                    }
+                  });
                   const locs = [...new Set((doc.assignments || []).map(a => a.location_name))].filter(Boolean);
 
                   return (
@@ -552,10 +599,10 @@ const Doctor = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {branches.map((b, i) => (
-                          <span key={i} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                            {b}
+                      <div className="flex flex-col gap-1">
+                        {branchAssignments.map((ba, i) => (
+                          <span key={i} className="px-2 py-1 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 w-fit">
+                            {ba.branch} {ba.time ? <span className="text-blue-300 font-medium ml-1">({ba.time})</span> : ''}
                           </span>
                         ))}
                       </div>
@@ -735,40 +782,27 @@ const Doctor = () => {
                 <option value="">Select Location</option>
                 {tempLocationsList.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
-              <select disabled={!tempLocation} value={tempDept} onChange={(e) => {
-                const val = e.target.value;
-                if (!val) return;
-                const did = parseInt(val, 10);
-                const lid = parseInt(tempLocation, 10);
-                const bid = parseInt(tempBranch, 10);
-                
-                const isDuplicate = formData.assignments.some(a => a.branch_id === bid && a.location_id === lid && a.department_id === did);
-                if (isDuplicate) {
-                  toast.error('This assignment is already added.');
-                  return;
-                }
-
-                const existingBlockInBranch = formData.assignments.find(a => a.branch_id === bid && a.location_id !== lid);
-                if (existingBlockInBranch) {
-                  toast.error(`Doctor is already assigned to block ${existingBlockInBranch.location_name} in this branch. Cannot assign to multiple blocks in the same branch.`);
-                  return;
-                }
-
-                const branchName = branches.find(b => b.id === bid)?.name;
-                const locName = locations.find(l => l.id === lid)?.name;
-                const deptName = departments.find(d => d.id === did)?.name;
-                
-                setFormData({
-                  ...formData,
-                  assignments: [...formData.assignments, { branch_id: bid, location_id: lid, department_id: did, branch_name: branchName, location_name: locName, department_name: deptName }]
-                });
-                setTempBranch('');
-                setTempLocation('');
-                setTempDept('');
-              }} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 disabled:opacity-50 cursor-pointer shadow-inner">
+              <select disabled={!tempLocation} value={tempDept} onChange={(e) => setTempDept(e.target.value)} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 disabled:opacity-50 cursor-pointer shadow-inner">
                 <option value="">Select Department</option>
                 {tempDepartmentsList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
+              
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  placeholder="Shift Time (e.g. 10:00 AM - 02:00 PM)" 
+                  value={tempShiftTime} 
+                  onChange={(e) => setTempShiftTime(e.target.value)} 
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 shadow-inner placeholder-slate-600" 
+                />
+                <button 
+                  type="button" 
+                  onClick={handleAddAssignmentClick} 
+                  className="px-4 py-2.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-xl font-medium text-sm transition-colors whitespace-nowrap"
+                >
+                  Add
+                </button>
+              </div>
             </div>
 
             {formData.assignments.length > 0 ? (
@@ -781,6 +815,12 @@ const Doctor = () => {
                       <span className="truncate">{a.location_name}</span>
                       <span className="text-slate-500 px-1">&bull;</span>
                       <span className="truncate text-slate-200">{a.department_name}</span>
+                      {a.shift_time && (
+                        <>
+                          <span className="text-slate-500 px-1">|</span>
+                          <span className="text-emerald-400 font-medium whitespace-nowrap">{a.shift_time}</span>
+                        </>
+                      )}
                     </div>
                     <button type="button" onClick={() => handleRemoveAssignment(idx)} className="text-slate-500 hover:text-rose-400 p-1 cursor-pointer transition-colors" title="Remove Assignment">
                       <X className="w-3.5 h-3.5" />

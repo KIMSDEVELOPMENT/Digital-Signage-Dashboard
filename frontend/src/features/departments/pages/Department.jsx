@@ -15,7 +15,7 @@ const Department = () => {
   const [filteredLocations, setFilteredLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  
+
   // Pagination & sorting states
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -371,7 +371,7 @@ const Department = () => {
         {/* Departments List */}
         <div className={(showAddForm && canCreate) ? 'lg:col-span-2 space-y-4' : 'lg:col-span-3 space-y-4'}>
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-            
+
             {/* Filter controls row */}
             <div className="flex flex-wrap items-center gap-3 flex-1">
               {/* Search Box */}
@@ -488,11 +488,10 @@ const Department = () => {
                             <button
                               onClick={() => handleToggleStatus(dept)}
                               disabled={!canUpdate}
-                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                                dept.status
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${dept.status
                                   ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15'
                                   : 'bg-rose-500/5 border-rose-500/10 text-rose-400 hover:bg-rose-500/15'
-                              }`}
+                                }`}
                             >
                               {dept.status ? 'Active' : 'Inactive'}
                             </button>
@@ -533,10 +532,10 @@ const Department = () => {
           )}
         </div>
       </div>
-      <DesignationOrderModal 
-        isOpen={orderModalOpen} 
-        onClose={() => setOrderModalOpen(false)} 
-        department={selectedDeptForOrder} 
+      <DesignationOrderModal
+        isOpen={orderModalOpen}
+        onClose={() => setOrderModalOpen(false)}
+        department={selectedDeptForOrder}
       />
     </div>
   );

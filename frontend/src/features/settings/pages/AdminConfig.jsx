@@ -3,7 +3,7 @@ import api from '../../../common/services/api';
 import { Search, ShieldAlert, Check, User, Save, RefreshCw, Layers, MapPin, Shield } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
-const MODULES = ['Doctor', 'Duty Roster'];
+const MODULES = ['Doctor', 'Duty Roster', 'Department'];
 
 const AdminConfig = () => {
   const [search, setSearch] = useState('');
