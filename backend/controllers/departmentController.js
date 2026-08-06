@@ -2,6 +2,7 @@ import departmentRepository from '../repositories/DepartmentRepository.js';
 import branchRepository from '../repositories/BranchRepository.js';
 import locationRepository from '../repositories/LocationRepository.js';
 import { notifyUpdate } from '../utils/sse.js';
+import { getPool } from '../config/db.js';
 
 export async function getDepartments(req, res) {
   try {
@@ -197,6 +198,84 @@ export async function deleteDepartment(req, res) {
     return res.status(200).json({ message: 'Department deleted successfully.' });
   } catch (error) {
     console.error('Delete department error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+export async function getDepartmentDesignations(req, res) {
+  const { id } = req.params;
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query(
+      'SELECT id, designation, sort_order FROM department_designations WHERE department_id = ? ORDER BY sort_order ASC',
+      [id]
+    );
+    return res.status(200).json(rows);
+  } catch (error) {
+    console.error('Get designations error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function updateDepartmentDesignations(req, res) {
+  const { id } = req.params;
+  const { designations } = req.body;
+  try {
+    const pool = getPool();
+    await pool.query('DELETE FROM department_designations WHERE department_id = ?', [id]);
+    
+    if (designations && designations.length > 0) {
+      for (let i = 0; i < designations.length; i++) {
+        await pool.query(
+          'INSERT INTO department_designations (department_id, designation, sort_order) VALUES (?, ?, ?)',
+          [id, designations[i], i + 1]
+        );
+      }
+    }
+    return res.status(200).json({ message: 'Designations updated successfully.' });
+  } catch (error) {
+    console.error('Update designations error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function getDoctorsOrder(req, res) {
+  const { id } = req.params;
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query(
+      `SELECT d.id AS doctor_id, d.name, d.designation, da.display_order
+       FROM doctor_assignments da
+       JOIN doctors d ON da.doctor_id = d.id
+       LEFT JOIN department_designations dd ON dd.department_id = da.department_id
+            AND UPPER(dd.designation) = UPPER(d.designation)
+       WHERE da.department_id = ?
+       ORDER BY COALESCE(dd.sort_order, 99) ASC, da.display_order ASC, d.name ASC`,
+      [id]
+    );
+    return res.status(200).json(rows);
+  } catch (error) {
+    console.error('Get doctors order error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function updateDoctorsOrder(req, res) {
+  const { id } = req.params;
+  const { orders } = req.body; // [{ doctor_id, display_order }]
+  try {
+    const pool = getPool();
+    if (orders && orders.length > 0) {
+      for (const item of orders) {
+        await pool.query(
+          'UPDATE doctor_assignments SET display_order = ? WHERE department_id = ? AND doctor_id = ?',
+          [item.display_order, id, item.doctor_id]
+        );
+      }
+    }
+    notifyUpdate();
+    return res.status(200).json({ message: 'Doctor display order updated successfully.' });
+  } catch (error) {
+    console.error('Update doctors order error:', error);
     return res.status(500).json({ message: 'Internal server error.' });
   }
 }

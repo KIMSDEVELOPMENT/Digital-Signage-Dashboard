@@ -35,9 +35,9 @@ export async function downloadTemplate(req, res) {
 
   try {
     const wsSchedule = xlsx.utils.json_to_sheet([
-      { 'Date': '', 'Site Name': branch, 'Block Name': '', 'Department Name': '', 'Doctor Name': '', 'Timing': '' }
+      { 'Date': '', 'Site Name': branch, 'Block Name': '', 'Department Name': '', 'Doctor Name': '' }
     ], {
-      header: ['Date', 'Site Name', 'Block Name', 'Department Name', 'Doctor Name', 'Timing'],
+      header: ['Date', 'Site Name', 'Block Name', 'Department Name', 'Doctor Name'],
       skipHeader: false
     });
 
@@ -79,12 +79,12 @@ export async function previewRoster(req, res) {
       headers.push(cell ? String(cell.v).trim() : '');
     }
 
-    const expectedHeaders = ['Date', 'Site Name', 'Block Name', 'Department Name', 'Doctor Name', 'Timing'];
+    const expectedHeaders = ['Date', 'Site Name', 'Block Name', 'Department Name', 'Doctor Name'];
     let isHeaderValid = true;
-    if (headers.length < 6) {
+    if (headers.length < 5) {
       isHeaderValid = false;
     } else {
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < expectedHeaders.length; i++) {
         if (headers[i] !== expectedHeaders[i]) {
           isHeaderValid = false;
           break;
@@ -181,7 +181,7 @@ export async function previewRoster(req, res) {
       const rowBlock = row['Block Name'] ? String(row['Block Name']).trim() : '';
       const rowDept = row['Department Name'] ? String(row['Department Name']).trim() : '';
       const rowDocName = row['Doctor Name'] ? String(row['Doctor Name']).trim() : '';
-      const rowTiming = row['Timing'] ? String(row['Timing']).trim() : '';
+      const rowTiming = '09:00 AM - 05:00 PM';
 
       // Skip the template instruction row if present
       if (!rowDate && rowSite === branch && !rowBlock && !rowDept && !rowDocName) {
@@ -285,10 +285,6 @@ export async function previewRoster(req, res) {
             doctorId = matchedDoc.id;
           }
         }
-      }
-
-      if (!rowTiming) {
-        errors.push(`Row ${rowNum}: Timing is empty.`);
       }
 
       let branchId = null;

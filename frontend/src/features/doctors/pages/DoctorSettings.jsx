@@ -3,28 +3,47 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Loader2, Save, X, Calendar } from 'lucide-react';
 import api from '../../../common/services/api';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../../app/context/AuthContext';
+import Pagination from '../../../common/components/Pagination';
 
 const DoctorSettings = () => {
+  const { user, allLocations, getAssignedLocations, branches, getAssignedBranches } = useAuth();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [doctors, setDoctors] = useState([]);
   const [loading, setLoading] = useState(false);
   
   const [selectedDoctor, setSelectedDoctor] = useState(null);
-  const [selectedDays, setSelectedDays] = useState({ SSCC: [], PBMH: [] });
-  const [activeTab, setActiveTab] = useState('SSCC');
+  const [selectedDays, setSelectedDays] = useState([]);
   const [saving, setSaving] = useState(false);
+  
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [pagination, setPagination] = useState(null);
+
+  const assignedLocs = getAssignedLocations();
+  const availableLocations = assignedLocs === null ? allLocations : assignedLocs;
+  
+  const assignedBranches = getAssignedBranches();
+  const availableBranches = assignedBranches === null ? branches : assignedBranches;
 
   const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-  const searchDoctors = async (query) => {
-    if (!query) {
-      setDoctors([]);
-      return;
-    }
+  const fetchDoctors = async (currentSearch = searchQuery) => {
     setLoading(true);
     try {
-      const response = await api.get(`/sittings/search?query=${encodeURIComponent(query)}`);
-      setDoctors(response.data);
+      const params = { page, limit, search: currentSearch };
+      if (assignedLocs !== null && availableLocations.length > 0) {
+        params.locations = availableLocations.map(l => typeof l === 'string' ? l : l.location).join(',');
+      } else if (assignedLocs !== null && availableLocations.length === 0) {
+        setDoctors([]);
+        setPagination(null);
+        return;
+      }
+
+      const response = await api.get('/doctors', { params });
+      setDoctors(response.data.data);
+      setPagination(response.data.pagination);
     } catch (error) {
       console.error(error);
       toast.error('Failed to search doctors.');
@@ -35,46 +54,52 @@ const DoctorSettings = () => {
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
-      searchDoctors(searchQuery);
+      fetchDoctors(searchQuery);
     }, 500);
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery]);
+  }, [searchQuery, page, limit]);
+
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+  };
+
+  const handleLimitChange = (newLimit) => {
+    setLimit(newLimit);
+    setPage(1);
+  };
 
   const handleSelectDoctor = (doc) => {
     setSelectedDoctor(doc);
-    setActiveTab('SSCC');
+
+    let parsedDays = [];
     if (doc.display_days) {
       try {
-        const parsedDays = typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days;
-        if (Array.isArray(parsedDays)) {
-          setSelectedDays({ SSCC: parsedDays, PBMH: [] });
-        } else if (parsedDays && typeof parsedDays === 'object') {
-          setSelectedDays({
-            SSCC: parsedDays.SSCC || [],
-            PBMH: parsedDays.PBMH || []
+        const rawDays = typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days;
+        if (Array.isArray(rawDays)) {
+          parsedDays = rawDays;
+        } else if (rawDays && typeof rawDays === 'object') {
+          // Flatten any object-based days back into a single array
+          const allDays = new Set();
+          Object.values(rawDays).forEach(arr => {
+            if (Array.isArray(arr)) arr.forEach(d => allDays.add(d));
           });
-        } else {
-          setSelectedDays({ SSCC: [], PBMH: [] });
+          parsedDays = Array.from(allDays);
         }
       } catch (e) {
-        setSelectedDays({ SSCC: [], PBMH: [] });
+        parsedDays = [];
       }
-    } else {
-      setSelectedDays({ SSCC: [], PBMH: [] });
     }
+    
+    setSelectedDays(parsedDays);
   };
 
   const toggleDay = (day) => {
     setSelectedDays(prev => {
-      const currentTabDays = prev[activeTab] || [];
-      const newTabDays = currentTabDays.includes(day) 
-        ? currentTabDays.filter(d => d !== day) 
-        : [...currentTabDays, day];
-      
-      return {
-        ...prev,
-        [activeTab]: newTabDays
-      };
+      if (prev.includes(day)) {
+        return prev.filter(d => d !== day);
+      } else {
+        return [...prev, day];
+      }
     });
   };
 
@@ -88,7 +113,7 @@ const DoctorSettings = () => {
       });
       toast.success('Settings saved successfully!');
       setSelectedDoctor(null);
-      searchDoctors(searchQuery); // Refresh the list
+      fetchDoctors(); // Refresh the list
     } catch (error) {
       console.error(error);
       toast.error('Failed to save settings.');
@@ -123,7 +148,8 @@ const DoctorSettings = () => {
             <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
           </div>
         ) : doctors.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {doctors.map(doc => (
               <div 
                 key={doc.id} 
@@ -147,9 +173,11 @@ const DoctorSettings = () => {
                       try {
                         const days = typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days;
                         if (Array.isArray(days) && days.length > 0) {
+                          const locs = [...new Set((doc.assignments || []).map(a => a.location_name))].filter(Boolean);
+                          const label = locs.length > 0 ? locs.join(', ') : 'DAYS';
                           return (
                             <div className="flex flex-wrap gap-1 items-center">
-                              <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-1 rounded">SSCC</span>
+                              <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-1 rounded uppercase">{label}</span>
                               {days.map(d => (
                                 <span key={d} className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold">{d}</span>
                               ))}
@@ -158,19 +186,16 @@ const DoctorSettings = () => {
                         } else if (days && typeof days === 'object' && !Array.isArray(days)) {
                           return (
                             <div className="flex flex-col gap-1 w-full mt-1">
-                              {days.SSCC?.length > 0 && (
-                                <div className="flex flex-wrap gap-1 items-center">
-                                  <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-1 rounded">SSCC</span>
-                                  {days.SSCC.map(d => <span key={d} className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold">{d}</span>)}
-                                </div>
-                              )}
-                              {days.PBMH?.length > 0 && (
-                                <div className="flex flex-wrap gap-1 items-center">
-                                  <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-1 rounded">PBMH</span>
-                                  {days.PBMH.map(d => <span key={d} className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[9px] font-bold">{d}</span>)}
-                                </div>
-                              )}
-                              {(!days.SSCC?.length && !days.PBMH?.length) && <span className="text-xs text-slate-400 italic">No days assigned</span>}
+                              {Object.entries(days).map(([loc, locDays]) => {
+                                if (!locDays || locDays.length === 0) return null;
+                                return (
+                                  <div key={loc} className="flex flex-wrap gap-1 items-center">
+                                    <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-1 rounded uppercase">{loc}</span>
+                                    {locDays.map(d => <span key={d} className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold">{d}</span>)}
+                                  </div>
+                                );
+                              })}
+                              {Object.values(days).every(arr => !arr || arr.length === 0) && <span className="text-xs text-slate-400 italic">No days assigned</span>}
                             </div>
                           );
                         }
@@ -183,6 +208,18 @@ const DoctorSettings = () => {
                 </div>
               </div>
             ))}
+            </div>
+            
+            {pagination && pagination.totalRecords > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-800/60">
+                <Pagination
+                  pagination={pagination}
+                  onPageChange={handlePageChange}
+                  onLimitChange={handleLimitChange}
+                  loading={loading}
+                />
+              </div>
+            )}
           </div>
         ) : searchQuery ? (
           <div className="text-center py-12 text-slate-500">
@@ -190,7 +227,7 @@ const DoctorSettings = () => {
           </div>
         ) : (
           <div className="text-center py-12 text-slate-400">
-            Type in the search box to find a doctor.
+            No doctors found.
           </div>
         )}
       </div>
@@ -232,22 +269,7 @@ const DoctorSettings = () => {
               </div>
 
               <div className="p-6">
-                <div className="flex gap-2 mb-4 bg-slate-800/50 p-1 rounded-xl">
-                  <button 
-                    onClick={() => setActiveTab('SSCC')}
-                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'SSCC' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                  >
-                    SSCC Display
-                  </button>
-                  <button 
-                    onClick={() => setActiveTab('PBMH')}
-                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'PBMH' ? 'bg-sky-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                  >
-                    PBMH Display
-                  </button>
-                </div>
-                
-                <p className="text-slate-300 mb-4">Select the days this doctor should be displayed on the <strong className={activeTab === 'SSCC' ? 'text-emerald-400' : 'text-sky-400'}>{activeTab}</strong> screen:</p>
+                <p className="text-slate-300 mb-4">Select the days this doctor should be displayed:</p>
                 
                 <div className="grid grid-cols-2 gap-3">
                   {DAYS.map(day => (
@@ -255,8 +277,8 @@ const DoctorSettings = () => {
                       key={day}
                       onClick={() => toggleDay(day)}
                       className={`py-3 rounded-xl border-2 font-bold transition-all flex items-center justify-center gap-2
-                        ${(selectedDays[activeTab] || []).includes(day) 
-                          ? activeTab === 'SSCC' ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400 shadow-sm' : 'border-sky-500 bg-sky-500/20 text-sky-400 shadow-sm'
+                        ${selectedDays.includes(day) 
+                          ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400 shadow-sm' 
                           : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700 hover:text-slate-300'
                         }`}
                     >

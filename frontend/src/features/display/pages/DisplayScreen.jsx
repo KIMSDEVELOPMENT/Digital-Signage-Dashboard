@@ -507,7 +507,11 @@ const DisplayScreen = () => {
                               branchDays = parsedDays;
                             } else if (parsedDays && typeof parsedDays === 'object') {
                               const currentBranch = branch ? branch.toUpperCase() : 'SSCC';
-                              branchDays = parsedDays[currentBranch] || [];
+                              const currentLoc = location || '';
+                              
+                              // Prioritize location-specific config (case-insensitive match), fallback to branch config
+                              const locKeyMatch = Object.keys(parsedDays).find(k => k.toLowerCase() === currentLoc.toLowerCase());
+                              branchDays = locKeyMatch ? parsedDays[locKeyMatch] : (parsedDays[currentBranch] || []);
                             }
                             const isActive = branchDays.includes(day);
                             return (

@@ -1,4 +1,5 @@
 import branchRepository from '../repositories/BranchRepository.js';
+import { getPool } from '../config/db.js';
 import { notifyUpdate } from '../utils/sse.js';
 
 export async function getBranches(req, res) {
@@ -134,6 +135,44 @@ export async function deleteBranch(req, res) {
     return res.status(200).json({ message: 'Branch deleted successfully.' });
   } catch (error) {
     console.error('Delete branch error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function getBranchDesignationsMaster(req, res) {
+  const { id } = req.params;
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query(
+      'SELECT id, designation, sort_order FROM branch_designations WHERE branch_id = ? ORDER BY sort_order ASC',
+      [id]
+    );
+    return res.status(200).json(rows);
+  } catch (error) {
+    console.error('Get branch designation master error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function updateBranchDesignationsMaster(req, res) {
+  const { id } = req.params;
+  const { designations } = req.body; // array of strings in order
+  try {
+    const pool = getPool();
+    await pool.query('DELETE FROM branch_designations WHERE branch_id = ?', [id]);
+    
+    if (Array.isArray(designations) && designations.length > 0) {
+      for (let i = 0; i < designations.length; i++) {
+        await pool.query(
+          'INSERT INTO branch_designations (branch_id, designation, sort_order) VALUES (?, ?, ?)',
+          [id, designations[i].trim(), i + 1]
+        );
+      }
+    }
+    notifyUpdate();
+    return res.status(200).json({ message: 'Branch designations updated successfully.' });
+  } catch (error) {
+    console.error('Update branch designation master error:', error);
     return res.status(500).json({ message: 'Internal server error.' });
   }
 }

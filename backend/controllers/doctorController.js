@@ -6,19 +6,21 @@ import departmentRepository from '../repositories/DepartmentRepository.js';
 import branchRepository from '../repositories/BranchRepository.js';
 import locationRepository from '../repositories/LocationRepository.js';
 import userRepository from '../repositories/UserRepository.js';
+import sittingRepository from '../repositories/SittingRepository.js';
 import { notifyUpdate } from '../utils/sse.js';
 
 export async function getDoctors(req, res) {
   try {
-    const { search, branch, location, branch_id, location_id, department_id, page, limit, sortBy, sortOrder } = req.query;
+    const { search, branch, location, branch_id, location_id, department_id, page, limit, sortBy, sortOrder, locations } = req.query;
 
     const parsedBranchId = branch_id ? parseInt(branch_id, 10) : null;
     const parsedLocationId = location_id ? parseInt(location_id, 10) : null;
+    const parsedLocationsArray = locations ? locations.split(',').map(l => l.trim()) : null;
 
     if (!page) {
       const doctors = await doctorRepository.findWithFilters({
         branches: branch ? [branch] : (parsedBranchId ? [parsedBranchId] : null),
-        locations: location ? [location] : (parsedLocationId ? [parsedLocationId] : null),
+        locations: parsedLocationsArray || (location ? [location] : (parsedLocationId ? [parsedLocationId] : null)),
         departmentIds: department_id ? [department_id] : null,
         search: search || null,
       });
@@ -37,10 +39,15 @@ export async function getDoctors(req, res) {
       sortOrder: sortOrder || 'asc',
     };
 
+    if (parsedLocationsArray) {
+      paginationParams.locations = parsedLocationsArray;
+    } else {
+      if (location) paginationParams.locationId = location;
+      if (parsedLocationId) paginationParams.locationId = parsedLocationId;
+    }
+
     if (branch) paginationParams.branchId = branch;
-    if (location) paginationParams.locationId = location; // Actually, in findPaginated, locationId is used. But wait, we should pass location name properly if needed. In findPaginated, if locationId is a string it's handled as l.name!
     if (parsedBranchId) paginationParams.branchId = parsedBranchId;
-    if (parsedLocationId) paginationParams.locationId = parsedLocationId;
     if (department_id) paginationParams.departmentId = department_id;
 
     const { data, totalRecords } = await doctorRepository.findPaginated(paginationParams);
@@ -65,7 +72,10 @@ export async function getDoctors(req, res) {
 }
 
 export async function createDoctor(req, res) {
-  const { employee_id, name, designation, assignments } = req.body;
+  let { employee_id, name, designation, assignments } = req.body;
+  if (designation) {
+    designation = designation.replace(/\s+/g, ' ');
+  }
   
   let parsedAssignments = [];
   if (assignments) {
@@ -129,7 +139,10 @@ export async function createDoctor(req, res) {
 
 export async function updateDoctor(req, res) {
   const { id } = req.params;
-  const { employee_id, name, designation, status, assignments, remove_photo } = req.body;
+  let { employee_id, name, designation, status, assignments, remove_photo } = req.body;
+  if (designation) {
+    designation = designation.replace(/\s+/g, ' ');
+  }
 
   let parsedAssignments = [];
   if (assignments) {
@@ -257,15 +270,15 @@ export async function downloadDoctorTemplate(req, res) {
   try {
     const wb = xlsx.utils.book_new();
     const ws = xlsx.utils.aoa_to_sheet([
-      ['CLINICIAN', 'EMPLOYEE ID', 'TITLE / DESIGNATION', 'DEPARTMENTS', 'BRANCHES', 'LOCATIONS'],
-      ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'PBMH', 'A BLOCK'],
-      ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'SSCC', 'KSS'],
-      ['Dr. JANE SMITH', '002', 'Cardiologist', 'Cardiology', 'PBMH', 'B BLOCK']
+      ['CLINICIAN', 'EMPLOYEE ID', 'TITLE / DESIGNATION', 'DEPARTMENTS', 'BRANCHES', 'LOCATIONS', 'AVAILABLE DAYS'],
+      ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'PBMH', 'A BLOCK', 'MON, TUE, WED, THU, FRI, SAT'],
+      ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'SSCC', 'KSS', 'MON, TUE, WED, THU, FRI, SAT'],
+      ['Dr. JANE SMITH', '002', 'Cardiologist', 'Cardiology', 'PBMH', 'B BLOCK', 'MON, WED, FRI']
     ]);
     
     // Auto-size columns slightly
     const wscols = [
-      {wch: 25}, {wch: 15}, {wch: 25}, {wch: 20}, {wch: 20}, {wch: 20}
+      {wch: 25}, {wch: 15}, {wch: 25}, {wch: 20}, {wch: 20}, {wch: 20}, {wch: 30}
     ];
     ws['!cols'] = wscols;
 
@@ -309,7 +322,7 @@ export async function uploadBulkDoctors(req, res) {
     // Cache to minimize DB queries
     const branchCache = {}; // name -> id
     const locCache = {}; // branchId_name -> id
-    const deptCache = {}; // name -> id
+    const deptCache = {}; // branchId_locationId_name -> id
 
     // Load existing masters to memory for quick mapping
     const allBranches = await branchRepository.findAll();
@@ -319,7 +332,7 @@ export async function uploadBulkDoctors(req, res) {
     allLocations.forEach(l => locCache[`${l.branch_id}_${l.name.toLowerCase()}`] = l.id);
 
     const allDepts = await departmentRepository.findAll();
-    allDepts.forEach(d => deptCache[d.name.toLowerCase()] = d.id);
+    allDepts.forEach(d => deptCache[`${d.branch_id}_${d.location_id}_${d.name.toLowerCase()}`] = d.id);
 
     let successCount = 0;
     let errorCount = 0;
@@ -328,7 +341,8 @@ export async function uploadBulkDoctors(req, res) {
     for (const row of data) {
       const name = row['CLINICIAN']?.toString().trim();
       let empId = row['EMPLOYEE ID']?.toString().trim();
-      const designation = row['TITLE / DESIGNATION']?.toString().trim();
+      const rawDesignation = row['TITLE / DESIGNATION']?.toString().trim();
+      const designation = rawDesignation ? rawDesignation.replace(/\s+/g, ' ') : null;
       const departmentName = row['DEPARTMENTS']?.toString().trim();
       const branchName = row['BRANCHES']?.toString().trim();
       const locationName = row['LOCATIONS']?.toString().trim();
@@ -364,11 +378,33 @@ export async function uploadBulkDoctors(req, res) {
         continue;
       }
 
-      const deptId = deptCache[departmentName.toLowerCase()];
+      const deptId = deptCache[`${branchId}_${locId}_${departmentName.toLowerCase()}`];
       if (!deptId) {
         errorCount++;
-        errorDetails.push(`Employee '${empId}' (${formattedName}): Department '${departmentName}' not found in master data.`);
+        errorDetails.push(`Employee '${empId}' (${formattedName}): Department '${departmentName}' not found in master data for this Branch and Location.`);
         continue;
+      }
+
+      const rawDays = row['AVAILABLE DAYS']?.toString().trim();
+      let parsedDays = null;
+      if (rawDays) {
+        const VALID_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+        const tokens = rawDays.toUpperCase().split(/[\s,]+/);
+        const set = new Set();
+        for (const token of tokens) {
+          const clean = token.replace(/[^A-Z]/g, '');
+          if (clean === 'DAILY' || clean === 'ALL' || clean === 'ALLDAYS') {
+            VALID_DAYS.forEach(d => set.add(d));
+          } else if (VALID_DAYS.includes(clean)) {
+            set.add(clean);
+          } else {
+            const match = VALID_DAYS.find(d => clean.startsWith(d));
+            if (match) set.add(match);
+          }
+        }
+        if (set.size > 0) {
+          parsedDays = VALID_DAYS.filter(d => set.has(d));
+        }
       }
 
       if (!doctorsMap.has(empId)) {
@@ -377,11 +413,15 @@ export async function uploadBulkDoctors(req, res) {
           name: formattedName,
           designation,
           status: 1, // Default active
-          assignments: []
+          assignments: [],
+          branch_days: {}
         });
       }
 
       const doc = doctorsMap.get(empId);
+      if (parsedDays && parsedDays.length > 0) {
+        doc.branch_days[branchName.toUpperCase()] = parsedDays;
+      }
 
       // Validate: A doctor cannot be assigned to multiple blocks/locations within the same branch
       const existingBranchAssign = doc.assignments.find(a => a.branch_id === branchId);
@@ -429,6 +469,12 @@ export async function uploadBulkDoctors(req, res) {
         });
         await doctorRepository.syncAssignments(newId, docData.assignments);
       }
+
+      // Upsert display_days if available from bulk upload (stored per branch)
+      if (docData.branch_days && Object.keys(docData.branch_days).length > 0) {
+        await sittingRepository.upsertSitting(empId, docData.branch_days);
+      }
+
       successCount++;
     }
 

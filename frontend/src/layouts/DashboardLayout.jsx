@@ -16,7 +16,8 @@ import {
   Settings,
   Layers,
   Video,
-  Lock
+  Lock,
+  Award
 } from 'lucide-react';
 import logoImg from '../common/assets/logo.png';
 import ChangePasswordModal from '../features/authentication/components/ChangePasswordModal';
@@ -79,6 +80,12 @@ const DashboardLayout = () => {
       name: 'Department Master',
       path: '/departments',
       icon: Layers,
+      visible: user?.role === 'super_admin',
+    },
+    {
+      name: 'Designation Master',
+      path: '/designation-master',
+      icon: Award,
       visible: user?.role === 'super_admin',
     },
     {

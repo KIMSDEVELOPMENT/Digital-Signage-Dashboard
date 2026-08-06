@@ -85,6 +85,8 @@ export const getScreenPlaylist = async (req, res) => {
              AND da.branch_id = r.branch_id 
              AND da.location_id = r.location_id
         JOIN departments dept ON da.department_id = dept.id
+        LEFT JOIN department_designations dd ON dd.department_id = dept.id 
+             AND UPPER(dd.designation) = UPPER(d.designation)
         WHERE r.date = CURRENT_DATE
           AND r.location_id IN (?)
       `;
@@ -97,18 +99,8 @@ export const getScreenPlaylist = async (req, res) => {
 
       doctorQuery += `
         ORDER BY dept.name ASC, 
-        CASE UPPER(d.designation)
-          WHEN 'HOD' THEN 1
-          WHEN 'PROFESSOR' THEN 2
-          WHEN 'ASSOCIATE PROFESSOR' THEN 3
-          WHEN 'ASST. PROFESSOR' THEN 4
-          WHEN 'ASSISTANT PROFESSOR' THEN 4
-          WHEN 'SR. RESIDENT' THEN 5
-          WHEN 'SENIOR RESIDENT' THEN 5
-          WHEN 'JR. RESIDENT' THEN 6
-          WHEN 'JUNIOR RESIDENT' THEN 6
-          ELSE 99
-        END ASC, 
+        COALESCE(dd.sort_order, 99) ASC, 
+        da.display_order ASC,
         d.name ASC
       `;
 

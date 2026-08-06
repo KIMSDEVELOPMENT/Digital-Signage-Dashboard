@@ -5,7 +5,7 @@ export class DoctorRepository {
   
   _getSelectQuery() {
     return `
-      SELECT doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at,
+      SELECT doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at, s.display_days,
       JSON_ARRAYAGG(
         JSON_OBJECT(
           'id', da.id,
@@ -18,6 +18,7 @@ export class DoctorRepository {
         )
       ) AS assignments
       FROM doctors doc
+      LEFT JOIN doctor_sittings s ON doc.employee_id = s.employee_id
       JOIN doctor_assignments da ON doc.id = da.doctor_id
         JOIN branches b ON da.branch_id = b.id AND b.status = 1
         JOIN locations l ON da.location_id = l.id AND l.status = 1
@@ -95,6 +96,18 @@ export class DoctorRepository {
       }
       params.push(...branches);
       countParams.push(...branches);
+    }
+
+    if (locations !== null) {
+      if (locations.length === 0) return { data: [], totalRecords: 0 };
+      const placeholders = locations.map(() => '?').join(',');
+      if (typeof locations[0] === 'number' || !isNaN(locations[0])) {
+        clauses.push(`da.location_id IN (${placeholders})`);
+      } else {
+        clauses.push(`l.name IN (${placeholders})`);
+      }
+      params.push(...locations);
+      countParams.push(...locations);
     }
 
     if (departmentIds !== null && departmentIds.length > 0) {

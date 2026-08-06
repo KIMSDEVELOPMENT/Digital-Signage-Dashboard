@@ -8,6 +8,7 @@ export class Doctor {
     this.status = row.status;
     this.created_at = row.created_at;
     this.updated_at = row.updated_at;
+    this.display_days = row.display_days;
     
     // Parse JSON assignments if provided by MySQL JSON_ARRAYAGG
     let parsedAssignments = [];
@@ -41,6 +42,7 @@ export class Doctor {
       status: !!this.status,
       created_at: this.created_at,
       updated_at: this.updated_at,
+      display_days: this.display_days,
       assignments: this.assignments
     };
   }

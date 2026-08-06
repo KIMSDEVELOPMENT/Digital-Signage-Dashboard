@@ -6,6 +6,8 @@ import { TableRowSkeleton } from '../../../common/components/Skeleton';
 import Pagination from '../../../common/components/Pagination';
 import Modal from '../../../common/components/Modal';
 import { toast } from 'react-hot-toast';
+import Cropper from 'react-easy-crop';
+import getCroppedImg from '../../../common/utils/cropImage';
 
 const Doctor = () => {
   const { user, hasPermission } = useAuth();
@@ -55,6 +57,13 @@ const Doctor = () => {
 
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
+
+  // Crop states
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [tempImageSrc, setTempImageSrc] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
 
   const debounceRef = useRef(null);
 
@@ -168,14 +177,37 @@ const Doctor = () => {
         toast.error('Only image/photo files are allowed.');
         return;
       }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size must be less than 5MB.');
+      if (file.size > 12 * 1024 * 1024) {
+        toast.error('Image size must be less than 12MB.');
         return;
       }
-      setPhotoFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => setPhotoPreview(reader.result);
+      reader.onloadend = () => {
+        setTempImageSrc(reader.result);
+        setCrop(({ x: 0, y: 0 }));
+        setZoom(1);
+        setCropModalOpen(true);
+      };
       reader.readAsDataURL(file);
+      e.target.value = ''; // Reset input so the same file can be selected again
+    }
+  };
+
+  const onCropComplete = useCallback((croppedArea, croppedAreaPixels) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  const handleCropSave = async () => {
+    try {
+      const croppedImageBlob = await getCroppedImg(tempImageSrc, croppedAreaPixels);
+      const croppedFile = new File([croppedImageBlob], 'profile.jpg', { type: 'image/jpeg' });
+      setPhotoFile(croppedFile);
+      setPhotoPreview(URL.createObjectURL(croppedImageBlob));
+      setCropModalOpen(false);
+      setTempImageSrc(null);
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to crop image');
     }
   };
 
@@ -219,6 +251,8 @@ const Doctor = () => {
     setTempBranch('');
     setTempLocation('');
     setTempDept('');
+    setCropModalOpen(false);
+    setTempImageSrc(null);
   };
 
   const handleRemoveAssignment = (index) => {
@@ -381,7 +415,7 @@ const Doctor = () => {
               className="appearance-none pl-3 pr-8 py-2.5 rounded-xl text-xs bg-slate-900/40 border border-slate-800 text-slate-300 focus:border-emerald-500/60 focus:outline-none font-semibold cursor-pointer"
             >
               <option value="">All Branches</option>
-              {allowedBranches.map((b) => (
+              {branches.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </select>
@@ -600,6 +634,52 @@ const Doctor = () => {
         closeOnBackdropClick={false}
         closeOnEscape={false}
       >
+          {cropModalOpen ? (
+            <div className="space-y-4">
+              <div className="relative w-full h-80 bg-slate-900 rounded-xl overflow-hidden border border-slate-700">
+                <Cropper
+                  image={tempImageSrc}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={1}
+                  cropShape="round"
+                  showGrid={false}
+                  onCropChange={setCrop}
+                  onCropComplete={onCropComplete}
+                  onZoomChange={setZoom}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-semibold text-slate-300">Zoom</label>
+                <input
+                  type="range"
+                  value={zoom}
+                  min={1}
+                  max={3}
+                  step={0.1}
+                  aria-labelledby="Zoom"
+                  onChange={(e) => setZoom(e.target.value)}
+                  className="w-full accent-emerald-500"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setCropModalOpen(false); setTempImageSrc(null); }}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCropSave}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors font-medium text-sm flex items-center gap-2 shadow-lg shadow-emerald-500/20"
+                >
+                  Apply Crop
+                </button>
+              </div>
+            </div>
+          ) : (
         <form onSubmit={handleAddDoctor} className="space-y-5">
           <div className="flex flex-col items-center justify-center p-6 border border-dashed border-slate-700/60 rounded-2xl bg-slate-900/30 group transition-all hover:bg-slate-900/50 hover:border-emerald-500/50">
             {photoPreview ? (
@@ -613,7 +693,7 @@ const Doctor = () => {
               <label className="flex flex-col items-center justify-center cursor-pointer space-y-2">
                 <div className="text-center">
                   <p className="text-sm font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors">Upload Photo</p>
-                  <p className="text-[11px] text-slate-500 mt-1">JPG, PNG or WEBP (Max 5MB)</p>
+                        <span className="text-slate-400 block mt-1">JPG, PNG or WEBP (Max 12MB)</span>
                 </div>
                 <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
               </label>
@@ -732,6 +812,7 @@ const Doctor = () => {
             </button>
           </div>
         </form>
+        )}
       </Modal>
     </div>
   );

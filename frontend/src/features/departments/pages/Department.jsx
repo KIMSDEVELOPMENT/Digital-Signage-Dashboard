@@ -5,6 +5,7 @@ import { Plus, Trash2, Search, Building2, ToggleLeft, ToggleRight, Layers, Edit2
 import { TableSkeleton } from '../../../common/components/Skeleton';
 import Pagination from '../../../common/components/Pagination';
 import { toast } from 'react-hot-toast';
+import { DesignationOrderModal } from '../components/DesignationOrderModal';
 
 const Department = () => {
   const { user, hasPermission } = useAuth();
@@ -35,6 +36,10 @@ const Department = () => {
   const [selectedLocation, setSelectedLocation] = useState('');
   const [deptStatus, setDeptStatus] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Designation Order Modal state
+  const [orderModalOpen, setOrderModalOpen] = useState(false);
+  const [selectedDeptForOrder, setSelectedDeptForOrder] = useState(null);
 
   const debounceRef = useRef(null);
 
@@ -461,7 +466,18 @@ const Department = () => {
                     {departments.length > 0 ? (
                       departments.map((dept) => (
                         <tr key={dept.id} className="hover:bg-slate-900/20 transition-colors">
-                          <td className="px-6 py-4 font-medium text-white">{dept.name}</td>
+                          <td className="px-6 py-4 font-medium text-white">
+                            <button
+                              onClick={() => {
+                                setSelectedDeptForOrder(dept);
+                                setOrderModalOpen(true);
+                              }}
+                              className="hover:text-emerald-400 hover:underline transition-colors text-left font-semibold cursor-pointer"
+                              title="Click to configure designation order for display screens"
+                            >
+                              {dept.name}
+                            </button>
+                          </td>
                           <td className="px-6 py-4 text-slate-300">
                             <span className="px-2.5 py-1 rounded-lg bg-blue-500/5 border border-blue-500/10 text-blue-400 text-xs font-semibold">
                               {dept.branch_name}
@@ -517,6 +533,11 @@ const Department = () => {
           )}
         </div>
       </div>
+      <DesignationOrderModal 
+        isOpen={orderModalOpen} 
+        onClose={() => setOrderModalOpen(false)} 
+        department={selectedDeptForOrder} 
+      />
     </div>
   );
 };
