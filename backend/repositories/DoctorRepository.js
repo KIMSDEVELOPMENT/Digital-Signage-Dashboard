@@ -27,6 +27,37 @@ export class DoctorRepository {
     `;
   }
 
+  /**
+   * Variant used by the Doctor Shuffling (sittings) page.
+   * Includes ALL departments (active OR inactive) so the frontend can show
+   * inactive-department doctors as greyed-out/disabled.
+   * The 'department_status' field is included in every assignment object.
+   */
+  _getSelectQueryWithDeptStatus() {
+    return `
+      SELECT doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at, s.display_days,
+      JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'id', da.id,
+          'branch_id', da.branch_id,
+          'branch_name', b.name,
+          'location_id', da.location_id,
+          'location_name', l.name,
+          'department_id', da.department_id,
+          'department_name', dept.name,
+          'department_status', dept.status,
+          'shift_time', da.shift_time
+        )
+      ) AS assignments
+      FROM doctors doc
+      LEFT JOIN doctor_sittings s ON doc.employee_id = s.employee_id
+      JOIN doctor_assignments da ON doc.id = da.doctor_id
+        JOIN branches b ON da.branch_id = b.id AND b.status = 1
+        JOIN locations l ON da.location_id = l.id AND l.status = 1
+        JOIN departments dept ON da.department_id = dept.id
+    `;
+  }
+
   async findWithFilters({ branches = null, locations = null, departmentIds = null, search = null, status = 1 } = {}) {
     const pool = getPool();
     let query = this._getSelectQuery() + ' WHERE 1=1';
@@ -253,6 +284,69 @@ export class DoctorRepository {
     } finally {
       connection.release();
     }
+  }
+
+  /**
+   * Paginated doctor fetch for the Doctor Shuffling (sittings) page.
+   * Returns doctors from the user's accessible locations (or all for super_admin).
+   * Inactive departments are INCLUDED but flagged via department_status = 0
+   * so the frontend can display them as disabled/non-clickable.
+   */
+  async findPaginatedForShuffling({ page = 1, limit = 10, search = '', locations = null }) {
+    const pool = getPool();
+    const offset = (page - 1) * limit;
+
+    const clauses = ['doc.status = 1'];
+    const params = [];
+    const countParams = [];
+
+    // Filter by accessible locations (name-based from user permissions)
+    if (locations !== null) {
+      if (locations.length === 0) return { data: [], totalRecords: 0 };
+      const placeholders = locations.map(() => '?').join(',');
+      if (typeof locations[0] === 'number' || !isNaN(locations[0])) {
+        clauses.push(`da.location_id IN (${placeholders})`);
+      } else {
+        clauses.push(`l.name IN (${placeholders})`);
+      }
+      params.push(...locations);
+      countParams.push(...locations);
+    }
+
+    if (search) {
+      clauses.push('(doc.name LIKE ? OR doc.name LIKE ? OR doc.employee_id LIKE ? OR doc.designation LIKE ? OR doc.designation LIKE ?)');
+      params.push(`${search}%`, `% ${search}%`, `%${search}%`, `${search}%`, `% ${search}%`);
+      countParams.push(`${search}%`, `% ${search}%`, `%${search}%`, `${search}%`, `% ${search}%`);
+    }
+
+    const whereClause = ' WHERE ' + clauses.join(' AND ');
+
+    const countQuery = `
+      SELECT COUNT(DISTINCT doc.id) AS total
+      FROM doctors doc
+      JOIN doctor_assignments da ON doc.id = da.doctor_id
+        JOIN branches b ON da.branch_id = b.id AND b.status = 1
+        JOIN locations l ON da.location_id = l.id AND l.status = 1
+        JOIN departments dept ON da.department_id = dept.id
+      ${whereClause}
+    `;
+    const [countRows] = await pool.query(countQuery, countParams);
+    const totalRecords = countRows[0].total;
+
+    const dataQuery = `
+      ${this._getSelectQueryWithDeptStatus()}
+      ${whereClause}
+      GROUP BY doc.id
+      ORDER BY doc.name ASC
+      LIMIT ? OFFSET ?
+    `;
+    params.push(limit, offset);
+
+    const [rows] = await pool.query(dataQuery, params);
+    return {
+      data: rows.map((r) => new Doctor(r)),
+      totalRecords,
+    };
   }
 
   async findByNameBranchDepartment(name, branchId, departmentId) {

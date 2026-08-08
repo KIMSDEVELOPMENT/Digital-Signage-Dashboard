@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../../app/context/AuthContext';
 import api from '../../../common/services/api';
-import { Plus, Trash2, Search, Building2, ToggleLeft, ToggleRight, Layers, Edit2, X } from 'lucide-react';
+import { Plus, Trash2, Search, Building2, ToggleLeft, ToggleRight, Layers, Edit2, X, Lock } from 'lucide-react';
 import { TableSkeleton } from '../../../common/components/Skeleton';
 import Pagination from '../../../common/components/Pagination';
 import { toast } from 'react-hot-toast';
@@ -42,6 +42,7 @@ const Department = () => {
   const [selectedDeptForOrder, setSelectedDeptForOrder] = useState(null);
 
   const debounceRef = useRef(null);
+  const sseRef = useRef(null);
 
   // 1. Fetch dynamic masters for dropdowns
   const fetchMasters = useCallback(async () => {
@@ -98,6 +99,7 @@ const Department = () => {
       if (currentSearch) params.search = currentSearch;
       if (filterBranch) params.branch_id = filterBranch;
       if (filterLocation) params.location_id = filterLocation;
+      // Role-based location filtering is handled automatically by the backend (via JWT)
 
       const res = await api.get('/departments', { params });
       setDepartments(res.data.data);
@@ -110,10 +112,33 @@ const Department = () => {
     }
   }, [page, limit, sortBy, sortOrder, filterBranch, filterLocation]);
 
+
   // Refetch when page, limit, sort, or filter changes
   useEffect(() => {
     fetchDepartments(search);
   }, [page, limit, sortBy, sortOrder, filterBranch, filterLocation]);
+
+  // SSE: real-time sync — when super-admin changes dept status, re-fetch silently
+  useEffect(() => {
+    const baseUrl = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api`;
+    const connect = () => {
+      if (sseRef.current) sseRef.current.close();
+      const es = new EventSource(`${baseUrl}/display/stream`);
+      sseRef.current = es;
+      es.onmessage = (event) => {
+        if (event.data === '"update"' || event.data === 'update') {
+          fetchDepartments(search);
+        }
+      };
+      es.onerror = () => {
+        es.close();
+        setTimeout(connect, 5000);
+      };
+    };
+    connect();
+    return () => { if (sseRef.current) sseRef.current.close(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSearchChange = (e) => {
     const value = e.target.value;
@@ -388,38 +413,6 @@ const Department = () => {
                 />
               </div>
 
-              {/* Branch Filter dropdown */}
-              <select
-                value={filterBranch}
-                onChange={(e) => {
-                  setFilterBranch(e.target.value);
-                  setPage(1);
-                }}
-                className="px-3 py-2 rounded-xl text-xs bg-slate-900/40 border border-slate-800 text-slate-300 focus:border-emerald-500/60 focus:outline-none font-semibold cursor-pointer"
-              >
-                <option value="">All Branches</option>
-                {branches.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-
-              {/* Location Filter dropdown */}
-              <select
-                value={filterLocation}
-                disabled={!filterBranch}
-                onChange={(e) => {
-                  setFilterLocation(e.target.value);
-                  setPage(1);
-                }}
-                className="px-3 py-2 rounded-xl text-xs bg-slate-900/40 border border-slate-800 text-slate-300 focus:border-emerald-500/60 focus:outline-none font-semibold cursor-pointer disabled:opacity-40"
-              >
-                <option value="">
-                  {!filterBranch ? 'Filter Location (Choose Branch)...' : 'All Locations'}
-                </option>
-                {listLocations.map(l => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </select>
             </div>
 
             <div className="text-xs text-slate-400 font-semibold self-center">
@@ -467,16 +460,28 @@ const Department = () => {
                       departments.map((dept) => (
                         <tr key={dept.id} className="hover:bg-slate-900/20 transition-colors">
                           <td className="px-6 py-4 font-medium text-white">
-                            <button
-                              onClick={() => {
-                                setSelectedDeptForOrder(dept);
-                                setOrderModalOpen(true);
-                              }}
-                              className="hover:text-emerald-400 hover:underline transition-colors text-left font-semibold cursor-pointer"
-                              title="Click to configure designation order for display screens"
-                            >
-                              {dept.name}
-                            </button>
+                            {dept.status ? (
+                              // Active dept: clickable link to open configuration modal
+                              <button
+                                onClick={() => {
+                                  setSelectedDeptForOrder(dept);
+                                  setOrderModalOpen(true);
+                                }}
+                                className="hover:text-emerald-400 hover:underline transition-colors text-left font-semibold cursor-pointer"
+                                title="Click to configure designation order for display screens"
+                              >
+                                {dept.name}
+                              </button>
+                            ) : (
+                              // Inactive dept: greyed out, non-clickable, shows lock icon
+                              <span
+                                className="inline-flex items-center gap-1.5 text-slate-500 font-semibold cursor-not-allowed select-none"
+                                title="Department is inactive – activate it first to configure"
+                              >
+                                <Lock className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                                {dept.name}
+                              </span>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-slate-300">
                             <span className="px-2.5 py-1 rounded-lg bg-blue-500/5 border border-blue-500/10 text-blue-400 text-xs font-semibold">

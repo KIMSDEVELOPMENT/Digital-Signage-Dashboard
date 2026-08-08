@@ -12,10 +12,17 @@ export async function getDepartments(req, res) {
     const parsedLocationId = location_id ? parseInt(location_id, 10) : null;
     const parsedStatus = status !== undefined ? parseInt(status, 10) : null;
 
+    // Determine role-based filtering from the verified JWT (req.user), NOT from query params
+    const isNormalAdmin = req.user && req.user.role === 'normal_admin';
+
     // If no pagination params provided, return full active list (backwards compatible)
     if (!page) {
+      // For normal_admin: return only departments from their assigned locations
+      if (isNormalAdmin) {
+        const departments = await departmentRepository.findByUserId(req.user.id, parsedBranchId, parsedLocationId);
+        return res.status(200).json(departments.map((d) => d.toPublic()));
+      }
       const departments = await departmentRepository.findAll(parsedBranchId, parsedLocationId, parsedStatus);
-
       return res.status(200).json(departments.map((d) => d.toPublic()));
     }
 
@@ -32,6 +39,9 @@ export async function getDepartments(req, res) {
       status: parsedStatus,
       sortBy: sortBy || 'name',
       sortOrder: sortOrder || 'asc',
+      // Scope to user's assigned departments/locations for normal_admin (from JWT, not query)
+      userId: isNormalAdmin ? req.user.id : null,
+      role: isNormalAdmin ? 'normal_admin' : 'super_admin',
     });
 
     const totalPages = Math.ceil(totalRecords / limitNum);

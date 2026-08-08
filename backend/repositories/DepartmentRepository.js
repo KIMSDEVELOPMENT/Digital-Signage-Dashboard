@@ -43,13 +43,15 @@ export class DepartmentRepository {
 
   async findByUserId(userId, branchId = null, locationId = null) {
     const pool = getPool();
+    // Returns all departments whose location is in the user's assigned locations (user_locations table)
     let query = `
       SELECT d.*, b.name AS branch_name, l.name AS location_name 
       FROM departments d
-      INNER JOIN user_departments ud ON d.id = ud.department_id
       JOIN branches b ON d.branch_id = b.id
       JOIN locations l ON d.location_id = l.id
-      WHERE ud.user_id = ?
+      WHERE d.location_id IN (
+        SELECT ul.location_id FROM user_locations ul WHERE ul.user_id = ?
+      )
     `;
     const params = [userId];
     if (branchId) {
@@ -121,11 +123,13 @@ export class DepartmentRepository {
     const params = [];
     const countParams = [];
 
-    // Role-based filtering
+    // Role-based filtering: normal_admin only sees departments in their assigned locations
     if (role === 'normal_admin' && userId) {
-      const normalAdminClause = ' AND d.id IN (SELECT department_id FROM user_departments WHERE user_id = ?)';
-      baseQuery += normalAdminClause;
-      countQuery += normalAdminClause;
+      const locationScopeClause = ` AND d.location_id IN (
+        SELECT ul.location_id FROM user_locations ul WHERE ul.user_id = ?
+      )`;
+      baseQuery += locationScopeClause;
+      countQuery += locationScopeClause;
       params.push(userId);
       countParams.push(userId);
     }

@@ -71,6 +71,64 @@ export async function getDoctors(req, res) {
   }
 }
 
+/**
+ * GET /doctors/for-shuffling
+ * Returns doctors for the Doctor Shuffling (display-day config) page.
+ * - normal_admin: filtered to their assigned locations only
+ * - super_admin: all doctors
+ * - Includes department_status per assignment so the frontend can mark
+ *   inactive departments as greyed-out/non-clickable.
+ */
+export async function getDoctorsForShuffling(req, res) {
+  try {
+    const { search, page, limit } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
+
+    // Resolve accessible locations for normal_admin
+    let locations = null; // null = all (super_admin)
+    if (req.user.role === 'normal_admin') {
+      const userLocs = await userRepository.getUserLocations(req.user.id);
+      // getUserLocations returns [{ branch, location }, ...]
+      locations = userLocs.map((l) => l.location); // location names
+      // If normal_admin has no locations assigned, return empty
+      if (locations.length === 0) {
+        return res.status(200).json({
+          success: true,
+          data: [],
+          pagination: { page: pageNum, limit: limitNum, totalRecords: 0, totalPages: 0, hasNextPage: false, hasPreviousPage: false },
+        });
+      }
+    }
+
+    const { data, totalRecords } = await doctorRepository.findPaginatedForShuffling({
+      page: pageNum,
+      limit: limitNum,
+      search: search || '',
+      locations,
+    });
+
+    const totalPages = Math.ceil(totalRecords / limitNum);
+
+    return res.status(200).json({
+      success: true,
+      data: data.map((d) => d.toPublic()),
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        totalRecords,
+        totalPages,
+        hasNextPage: pageNum < totalPages,
+        hasPreviousPage: pageNum > 1,
+      },
+    });
+  } catch (error) {
+    console.error('Get doctors for shuffling error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
 export async function createDoctor(req, res) {
   let { employee_id, name, designation, assignments } = req.body;
   if (designation) {
