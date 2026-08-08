@@ -250,6 +250,15 @@ export async function updateDoctor(req, res) {
       return res.status(400).json({ message: 'Another doctor with this Employee ID already exists.' });
     }
 
+    // Validate: Prevent name change for an existing Employee ID
+    const normalizeNameForCompare = (n) => n?.trim().replace(/\s+/g, ' ').toUpperCase();
+    if (normalizeNameForCompare(name) !== normalizeNameForCompare(existing.name)) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({
+        message: `Doctor name cannot be changed. The registered name for Employee ID '${employee_id}' is '${existing.name}'. Please use the correct name.`
+      });
+    }
+
     let photo_url = existing.photo_url;
     if (req.file) {
       if (existing.photo_url) {
@@ -501,6 +510,8 @@ export async function uploadBulkDoctors(req, res) {
       }
     }
 
+    const normalizeNameForCompare = (n) => n?.trim().replace(/\s+/g, ' ').toUpperCase();
+
     // Process grouped doctors
     for (const [empId, docData] of doctorsMap.entries()) {
       if (docData.assignments.length === 0) continue;
@@ -508,6 +519,13 @@ export async function uploadBulkDoctors(req, res) {
       // Check if exists
       const existing = await doctorRepository.findByEmployeeId(empId);
       if (existing) {
+        // Validate: name in the upload must match the registered name exactly (case-insensitive)
+        if (normalizeNameForCompare(docData.name) !== normalizeNameForCompare(existing.name)) {
+          errorCount++;
+          errorDetails.push(`Employee '${empId}': Name mismatch — Upload has '${docData.name}' but the registered name is '${existing.name}'. This doctor was skipped. Please use the correct name.`);
+          continue;
+        }
+
         // Find which branches are in the new upload
         const newBranchIds = [...new Set(docData.assignments.map(a => a.branch_id))];
         
@@ -524,10 +542,10 @@ export async function uploadBulkDoctors(req, res) {
         // Combine preserved assignments with the new ones
         const mergedAssignments = [...preservedAssignments, ...docData.assignments];
 
-        // Update existing doctor with updated master details
+        // Update existing doctor (name is preserved since it was validated above)
         await doctorRepository.updateDoctor(existing.id, {
           employee_id: docData.employee_id,
-          name: docData.name,
+          name: existing.name, // Always use the registered name, never overwrite with upload data
           designation: docData.designation,
           status: docData.status,
           photo_url: existing.photo_url,
