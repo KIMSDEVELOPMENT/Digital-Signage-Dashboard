@@ -2,6 +2,7 @@ import branchRepository from '../repositories/BranchRepository.js';
 import { getPool } from '../config/db.js';
 import { notifyUpdate } from '../utils/sse.js';
 
+
 export async function getBranches(req, res) {
   try {
     const { page, limit, search, sortBy, sortOrder, status } = req.query;
@@ -135,6 +136,22 @@ export async function deleteBranch(req, res) {
     return res.status(200).json({ message: 'Branch deleted successfully.' });
   } catch (error) {
     console.error('Delete branch error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function getAllDesignationsMaster(req, res) {
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query(
+      `SELECT DISTINCT bd.designation
+       FROM branch_designations bd
+       JOIN branches b ON b.id = bd.branch_id
+       ORDER BY bd.designation ASC`
+    );
+    return res.status(200).json(rows.map((r) => r.designation));
+  } catch (error) {
+    console.error('Get all designations master error:', error);
     return res.status(500).json({ message: 'Internal server error.' });
   }
 }

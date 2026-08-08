@@ -17,6 +17,7 @@ const Doctor = () => {
   const [branches, setBranches] = useState([]);
   const [locations, setLocations] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [designationsMaster, setDesignationsMaster] = useState([]);
 
   // Filter dropdown sources
   const [filterLocationsList, setFilterLocationsList] = useState([]);
@@ -66,6 +67,9 @@ const Doctor = () => {
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
 
+  // Designation combo state
+  const [showCustomDesignation, setShowCustomDesignation] = useState(false);
+
   const debounceRef = useRef(null);
 
   const fetchMasters = useCallback(async () => {
@@ -78,6 +82,9 @@ const Doctor = () => {
 
       const departmentsRes = await api.get('/departments?status=1', { params: { limit: 1000 } });
       setDepartments(departmentsRes.data.data || departmentsRes.data);
+
+      const designationsRes = await api.get('/branches/all-designations');
+      setDesignationsMaster(Array.isArray(designationsRes.data) ? designationsRes.data : []);
     } catch (err) {
       console.error('Error fetching masters:', err);
       toast.error('Failed to load doctor configuration masters.');
@@ -255,6 +262,7 @@ const Doctor = () => {
     setTempShiftTime('');
     setCropModalOpen(false);
     setTempImageSrc(null);
+    setShowCustomDesignation(false);
   };
 
   const handleRemoveAssignment = (index) => {
@@ -366,6 +374,8 @@ const Doctor = () => {
 
   const handleEdit = (doc) => {
     setEditingDoctor(doc);
+    const isKnownDesignation = designationsMaster.includes(doc.designation);
+    setShowCustomDesignation(!isKnownDesignation && !!doc.designation);
     setFormData({
       employee_id: doc.employee_id,
       name: doc.name ? doc.name.replace(/^Dr\.?\s*/i, '').trim() : '',
@@ -765,7 +775,47 @@ const Doctor = () => {
 
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Designation</label>
-            <input type="text" placeholder="e.g. Consultant Cardiologist" value={formData.designation} onChange={(e) => setFormData({ ...formData, designation: e.target.value })} className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner" />
+            {designationsMaster.length > 0 ? (
+              <>
+                <select
+                  value={showCustomDesignation ? '__custom__' : (formData.designation || '')}
+                  onChange={(e) => {
+                    if (e.target.value === '__custom__') {
+                      setShowCustomDesignation(true);
+                      setFormData({ ...formData, designation: '' });
+                    } else {
+                      setShowCustomDesignation(false);
+                      setFormData({ ...formData, designation: e.target.value });
+                    }
+                  }}
+                  className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white transition-colors shadow-inner"
+                >
+                  <option value="">Select Designation</option>
+                  {designationsMaster.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                  <option value="__custom__">── Enter custom designation ──</option>
+                </select>
+                {showCustomDesignation && (
+                  <input
+                    type="text"
+                    placeholder="e.g. Consultant Cardiologist"
+                    value={formData.designation}
+                    onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-emerald-500/50 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner mt-2"
+                    autoFocus
+                  />
+                )}
+              </>
+            ) : (
+              <input
+                type="text"
+                placeholder="e.g. Consultant Cardiologist"
+                value={formData.designation}
+                onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner"
+              />
+            )}
           </div>
 
           <div className="space-y-3 p-4 border border-slate-800/60 rounded-2xl bg-slate-900/10">
