@@ -71,7 +71,7 @@ export async function uploadVideo(req, res) {
       await execFileAsync(ffmpegPath, [
         '-i', originalPath,
         '-c:v', 'libx264',
-        '-preset', 'fast',
+        '-preset', 'ultrafast',
         '-crf', '28',
         '-c:a', 'aac',
         '-b:a', '128k',
