@@ -572,14 +572,7 @@ const Doctor = () => {
                 <TableRowSkeleton rows={5} cols={8} />
               ) : doctors.length > 0 ? (
                 doctors.map((doc) => {
-                  const depts = [...new Set((doc.assignments || []).map(a => a.department_name))].filter(Boolean);
-                  const branchAssignments = [];
-                  (doc.assignments || []).forEach(a => {
-                    if (a.branch_name && !branchAssignments.some(ba => ba.branch === a.branch_name && ba.time === a.shift_time)) {
-                      branchAssignments.push({ branch: a.branch_name, time: a.shift_time });
-                    }
-                  });
-                  const locs = [...new Set((doc.assignments || []).map(a => a.location_name))].filter(Boolean);
+                  const assignments = doc.assignments || [];
 
                   return (
                   <tr key={doc.id} className="hover:bg-slate-800/20 transition-colors group">
@@ -600,28 +593,28 @@ const Doctor = () => {
                     <td className="px-6 py-4 font-mono text-xs text-slate-300">{doc.employee_id}</td>
                     <td className="px-6 py-4 text-slate-300">{doc.designation}</td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {depts.map((d, i) => (
-                          <span key={i} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            {d}
+                      <div className="flex flex-col gap-2">
+                        {assignments.map((assignment) => (
+                          <span key={`${assignment.department_id}-${assignment.branch_id}-${assignment.location_id}`} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 w-fit">
+                            {assignment.department_name}
                           </span>
                         ))}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1">
-                        {branchAssignments.map((ba, i) => (
-                          <span key={i} className="px-2 py-1 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 w-fit">
-                            {ba.branch} {ba.time ? <span className="text-blue-300 font-medium ml-1">({ba.time})</span> : ''}
+                      <div className="flex flex-col gap-2">
+                        {assignments.map((assignment) => (
+                          <span key={`${assignment.branch_id}-${assignment.location_id}`} className="px-2 py-1 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 w-fit">
+                            {assignment.branch_name}{assignment.shift_time ? <span className="text-blue-300 font-medium ml-1">({assignment.shift_time})</span> : ''}
                           </span>
                         ))}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {locs.map((l, i) => (
-                          <span key={i} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                            {l}
+                      <div className="flex flex-col gap-2">
+                        {assignments.map((assignment) => (
+                          <span key={`${assignment.branch_id}-${assignment.location_id}-location`} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 w-fit">
+                            {assignment.location_name}
                           </span>
                         ))}
                       </div>

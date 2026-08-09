@@ -22,10 +22,7 @@ INSERT IGNORE INTO branches (name)
 SELECT DISTINCT branch FROM branches_locations;
 
 -- Add KIMS branches if not present
-INSERT IGNORE INTO branches (name) VALUES ('KIMS Bhubaneswar');
-INSERT IGNORE INTO branches (name) VALUES ('KIMS Balasore');
-INSERT IGNORE INTO branches (name) VALUES ('KIMS Cuttack');
-INSERT IGNORE INTO branches (name) VALUES ('KIMS Berhampur');
+DELETE FROM branches WHERE name IN ('KIMS Bhubaneswar', 'KIMS Balasore', 'KIMS Cuttack', 'KIMS Berhampur');
 
 -- 2. Create locations table
 CREATE TABLE IF NOT EXISTS locations (

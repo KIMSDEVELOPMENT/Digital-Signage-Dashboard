@@ -14,6 +14,7 @@ const DoctorSettings = () => {
   const [loading, setLoading] = useState(false);
 
   const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [selectedAssignmentKey, setSelectedAssignmentKey] = useState('');
   const [selectedDays, setSelectedDays] = useState([]);
   const [saving, setSaving] = useState(false);
 
@@ -25,6 +26,34 @@ const DoctorSettings = () => {
   const sseRef = useRef(null);
 
   const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+  const parseDisplayDays = (value) => {
+    if (!value) return [];
+    try {
+      const rawDays = typeof value === 'string' ? JSON.parse(value) : value;
+      if (Array.isArray(rawDays)) {
+        return rawDays;
+      }
+      if (rawDays && typeof rawDays === 'object') {
+        const allDays = new Set();
+        Object.values(rawDays).forEach((arr) => {
+          if (Array.isArray(arr)) arr.forEach((day) => allDays.add(day));
+        });
+        return Array.from(allDays);
+      }
+    } catch (error) {
+      return [];
+    }
+    return [];
+  };
+
+  const assignmentKey = (assignment) => `${assignment.branch_id}:${assignment.location_id}`;
+
+  const getInitialAssignment = (doc) => {
+    const assignments = doc.assignments || [];
+    if (assignments.length === 0) return null;
+    return assignments.find((assignment) => parseDisplayDays(assignment.display_days).length > 0) || assignments[0];
+  };
 
   // ─── Fetch doctors from the dedicated shuffling endpoint ──────────────────
   // This endpoint:
@@ -149,24 +178,17 @@ const DoctorSettings = () => {
 
     setSelectedDoctor(doc);
 
-    let parsedDays = [];
-    if (doc.display_days) {
-      try {
-        const rawDays = typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days;
-        if (Array.isArray(rawDays)) {
-          parsedDays = rawDays;
-        } else if (rawDays && typeof rawDays === 'object') {
-          const allDays = new Set();
-          Object.values(rawDays).forEach((arr) => {
-            if (Array.isArray(arr)) arr.forEach((d) => allDays.add(d));
-          });
-          parsedDays = Array.from(allDays);
-        }
-      } catch (e) {
-        parsedDays = [];
-      }
-    }
+    const initialAssignment = getInitialAssignment(doc);
+    setSelectedAssignmentKey(initialAssignment ? assignmentKey(initialAssignment) : '');
+    const parsedDays = parseDisplayDays(initialAssignment?.display_days || doc.display_days);
     setSelectedDays(parsedDays);
+  };
+
+  const handleAssignmentChange = (e) => {
+    const nextKey = e.target.value;
+    setSelectedAssignmentKey(nextKey);
+    const nextAssignment = (selectedDoctor?.assignments || []).find((assignment) => assignmentKey(assignment) === nextKey);
+    setSelectedDays(parseDisplayDays(nextAssignment?.display_days));
   };
 
   const toggleDay = (day) => {
@@ -181,10 +203,20 @@ const DoctorSettings = () => {
 
   const handleSave = async () => {
     if (!selectedDoctor) return;
+    const selectedAssignment = (selectedDoctor.assignments || []).find((assignment) => assignmentKey(assignment) === selectedAssignmentKey)
+      || getInitialAssignment(selectedDoctor);
+
+    if (!selectedAssignment) {
+      toast.error('Select a branch/location before saving availability.');
+      return;
+    }
+
     setSaving(true);
     try {
       await api.post('/sittings', {
         employee_id: selectedDoctor.employee_id,
+        branch_id: selectedAssignment.branch_id,
+        location_id: selectedAssignment.location_id,
         display_days: selectedDays,
       });
       toast.success('Settings saved successfully!');
@@ -312,29 +344,30 @@ const DoctorSettings = () => {
                         })}
                       </div>
 
-                      {/* Display days */}
+                      {/* Display days by branch/location */}
                       {isActive && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {(() => {
-                            try {
-                              const days =
-                                typeof doc.display_days === 'string'
-                                  ? JSON.parse(doc.display_days)
-                                  : doc.display_days;
-                              if (Array.isArray(days) && days.length > 0) {
-                                return days.map((d) => (
-                                  <span key={d} className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold">
-                                    {d}
+                        <div className="mt-2 space-y-2">
+                          {(doc.assignments || []).map((assignment) => {
+                            const days = parseDisplayDays(assignment.display_days);
+                            return (
+                              <div key={`${assignment.branch_id}-${assignment.location_id}`} className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-200 border border-slate-700">
+                                    {assignment.branch_name} / {assignment.location_name}{assignment.shift_time ? ` • ${assignment.shift_time}` : ''}
                                   </span>
-                                ));
-                              }
-                              return (
-                                <span className="text-xs text-slate-500 italic">No days configured</span>
-                              );
-                            } catch {
-                              return null;
-                            }
-                          })()}
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {days.length > 0 ? days.map((day) => (
+                                    <span key={`${assignment.branch_id}-${assignment.location_id}-${day}`} className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold">
+                                      {day}
+                                    </span>
+                                  )) : (
+                                    <span className="text-xs text-slate-500 italic">No days configured</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -403,6 +436,57 @@ const DoctorSettings = () => {
 
               <div className="p-6">
                 <p className="text-slate-300 mb-4">Select the days this doctor should be displayed:</p>
+
+                {selectedDoctor?.assignments?.length > 0 && (
+                  <div className="mb-4 rounded-xl border border-slate-800/80 bg-slate-950/40 p-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Branch / Location wise days</p>
+                    <div className="space-y-2">
+                      {selectedDoctor.assignments.map((assignment) => {
+                        const days = parseDisplayDays(assignment.display_days);
+                        const isSelected = assignmentKey(assignment) === selectedAssignmentKey;
+                        return (
+                          <div key={assignmentKey(assignment)} className={`rounded-lg border px-3 py-2 ${isSelected ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-slate-800/80 bg-slate-900/30'}`}>
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              <span className="text-xs font-semibold text-slate-200">
+                                {assignment.branch_name} / {assignment.location_name}
+                              </span>
+                              {assignment.shift_time && (
+                                <span className="text-[11px] text-slate-400">{assignment.shift_time}</span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {days.length > 0 ? days.map((day) => (
+                                <span key={`${assignmentKey(assignment)}-${day}`} className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                  {day}
+                                </span>
+                              )) : <span className="text-xs text-slate-500 italic">No days configured</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {selectedDoctor?.assignments?.length > 0 && (
+                  <div className="mb-4 space-y-2">
+                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Branch / Location
+                    </label>
+                    <select
+                      value={selectedAssignmentKey}
+                      onChange={handleAssignmentChange}
+                      className="w-full px-4 py-3 rounded-xl text-sm bg-slate-900 border border-slate-800 text-slate-200 focus:outline-none focus:border-emerald-500"
+                    >
+                      {selectedDoctor.assignments.map((assignment) => (
+                        <option key={assignmentKey(assignment)} value={assignmentKey(assignment)}>
+                          {assignment.branch_name} / {assignment.location_name}
+                          {assignment.shift_time ? ` • ${assignment.shift_time}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   {DAYS.map((day) => (

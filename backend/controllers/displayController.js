@@ -80,10 +80,12 @@ export const getScreenPlaylist = async (req, res) => {
         SELECT d.id, d.name, d.designation, d.photo_url, dept.name AS department_name, r.timing, ds.display_days
         FROM roster r
         JOIN doctors d ON r.doctor_id = d.id
-        LEFT JOIN doctor_sittings ds ON d.employee_id = ds.employee_id
         JOIN doctor_assignments da ON da.doctor_id = d.id 
              AND da.branch_id = r.branch_id 
              AND da.location_id = r.location_id
+         LEFT JOIN doctor_sittings ds ON d.employee_id = ds.employee_id
+           AND ds.branch_id = r.branch_id
+           AND ds.location_id = r.location_id
         JOIN departments dept ON da.department_id = dept.id
         LEFT JOIN department_designations dd ON dd.department_id = dept.id 
              AND UPPER(dd.designation) = UPPER(d.designation)

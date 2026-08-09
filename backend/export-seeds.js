@@ -89,11 +89,9 @@ async function main() {
     try {
       finalSql += await exportTableData(pool, 'branch_designations', [
         { name: 'id', type: 'number' },
-        { name: 'name', type: 'string' },
         { name: 'branch_id', type: 'number' },
-        { name: 'status', type: 'number' },
-        { name: 'created_at', type: 'date' },
-        { name: 'updated_at', type: 'date' }
+        { name: 'designation', type: 'string' },
+        { name: 'sort_order', type: 'number' }
       ]);
     } catch (e) {
       console.log('Skipping branch_designations (table might not exist)');

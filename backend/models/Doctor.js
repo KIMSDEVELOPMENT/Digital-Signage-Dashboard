@@ -28,7 +28,7 @@ export class Doctor {
         parsedAssignments = [];
       }
     }
-    
+
     this.assignments = parsedAssignments;
   }
 

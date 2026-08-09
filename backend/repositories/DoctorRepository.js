@@ -5,7 +5,7 @@ export class DoctorRepository {
   
   _getSelectQuery() {
     return `
-      SELECT doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at, s.display_days,
+      SELECT doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at,
       JSON_ARRAYAGG(
         JSON_OBJECT(
           'id', da.id,
@@ -15,15 +15,16 @@ export class DoctorRepository {
           'location_name', l.name,
           'department_id', da.department_id,
           'department_name', dept.name,
+          'display_days', ds.display_days,
           'shift_time', da.shift_time
         )
       ) AS assignments
       FROM doctors doc
-      LEFT JOIN doctor_sittings s ON doc.employee_id = s.employee_id
       JOIN doctor_assignments da ON doc.id = da.doctor_id
         JOIN branches b ON da.branch_id = b.id AND b.status = 1
         JOIN locations l ON da.location_id = l.id AND l.status = 1
         JOIN departments dept ON da.department_id = dept.id AND dept.status = 1
+        LEFT JOIN doctor_sittings ds ON doc.employee_id = ds.employee_id AND ds.branch_id = da.branch_id AND ds.location_id = da.location_id
     `;
   }
 
@@ -35,7 +36,7 @@ export class DoctorRepository {
    */
   _getSelectQueryWithDeptStatus() {
     return `
-      SELECT doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at, s.display_days,
+      SELECT doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at,
       JSON_ARRAYAGG(
         JSON_OBJECT(
           'id', da.id,
@@ -46,15 +47,16 @@ export class DoctorRepository {
           'department_id', da.department_id,
           'department_name', dept.name,
           'department_status', dept.status,
+          'display_days', ds.display_days,
           'shift_time', da.shift_time
         )
       ) AS assignments
       FROM doctors doc
-      LEFT JOIN doctor_sittings s ON doc.employee_id = s.employee_id
       JOIN doctor_assignments da ON doc.id = da.doctor_id
         JOIN branches b ON da.branch_id = b.id AND b.status = 1
         JOIN locations l ON da.location_id = l.id AND l.status = 1
         JOIN departments dept ON da.department_id = dept.id
+        LEFT JOIN doctor_sittings ds ON doc.employee_id = ds.employee_id AND ds.branch_id = da.branch_id AND ds.location_id = da.location_id
     `;
   }
 

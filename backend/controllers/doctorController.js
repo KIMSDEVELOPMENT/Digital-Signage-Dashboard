@@ -388,15 +388,23 @@ export async function uploadBulkDoctors(req, res) {
 
     // Cache to minimize DB queries
     const branchCache = {}; // name -> id
+    const branchNameById = {}; // id -> name
     const locCache = {}; // branchId_name -> id
+    const locationNameById = {}; // id -> name
     const deptCache = {}; // branchId_locationId_name -> id
 
     // Load existing masters to memory for quick mapping
     const allBranches = await branchRepository.findAll();
-    allBranches.forEach(b => branchCache[b.name.toLowerCase()] = b.id);
+    allBranches.forEach((b) => {
+      branchCache[b.name.toLowerCase()] = b.id;
+      branchNameById[b.id] = b.name;
+    });
     
     const allLocations = await locationRepository.findAll();
-    allLocations.forEach(l => locCache[`${l.branch_id}_${l.name.toLowerCase()}`] = l.id);
+    allLocations.forEach((l) => {
+      locCache[`${l.branch_id}_${l.name.toLowerCase()}`] = l.id;
+      locationNameById[l.id] = l.name;
+    });
 
     const allDepts = await departmentRepository.findAll();
     allDepts.forEach(d => deptCache[`${d.branch_id}_${d.location_id}_${d.name.toLowerCase()}`] = d.id);
@@ -563,9 +571,18 @@ export async function uploadBulkDoctors(req, res) {
         await doctorRepository.syncAssignments(newId, docData.assignments);
       }
 
-      // Upsert display_days if available from bulk upload (stored per branch)
+      // Upsert display_days per branch/location assignment.
       if (docData.branch_days && Object.keys(docData.branch_days).length > 0) {
-        await sittingRepository.upsertSitting(empId, docData.branch_days);
+        for (const assignment of docData.assignments) {
+          const branchName = branchNameById[assignment.branch_id];
+          const locationName = locationNameById[assignment.location_id];
+          if (!branchName || !locationName) continue;
+
+          const days = docData.branch_days[branchName.toUpperCase()];
+          if (Array.isArray(days) && days.length > 0) {
+            await sittingRepository.upsertSitting(empId, assignment.branch_id, assignment.location_id, days);
+          }
+        }
       }
 
       successCount++;
