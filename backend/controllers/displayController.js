@@ -102,7 +102,6 @@ export const getScreenPlaylist = async (req, res) => {
       doctorQuery += `
         ORDER BY dept.name ASC, 
         COALESCE(dd.sort_order, 99) ASC, 
-        da.display_order ASC,
         d.name ASC
       `;
 

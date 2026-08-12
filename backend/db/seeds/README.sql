@@ -1,0 +1,9 @@
+-- db/seeds/README.md
+-- This directory contains seed SQL files separated from structural migrations.
+-- Seed files populate initial/reference data and can be re-run independently.
+--
+-- Files moved here from migrations/:
+--   015_seed_pbmh_playlists.sql
+--   021_seed_core_hierarchy.sql
+--
+-- To run a seed: mysql -u <user> -p <database> < seeds/<file>.sql

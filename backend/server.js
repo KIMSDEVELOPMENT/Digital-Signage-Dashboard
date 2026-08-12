@@ -7,18 +7,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { initializePool } from './config/db.js';
-import authRoutes from './routes/authRoutes.js';
-import branchRoutes from './routes/branchRoutes.js';
-import locationRoutes from './routes/locationRoutes.js';
-import departmentRoutes from './routes/departmentRoutes.js';
-import doctorRoutes from './routes/doctorRoutes.js';
-import adminRoutes from './routes/adminRoutes.js';
-import rosterRoutes from './routes/rosterRoutes.js';
-import configRoutes from './routes/configRoutes.js';
-import displayRoutes from './routes/displayRoutes.js';
-import videoRoutes from './routes/videoRoutes.js';
-import settingsRoutes from './routes/settingsRoutes.js';
-import doctorSettingsRoutes from './routes/doctorSettingsRoutes.js';
 
 dotenv.config();
 
@@ -28,38 +16,49 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Security and utility middleware
-app.use(helmet({
-  crossOriginResourcePolicy: false, // Essential to allow serving doctor images to client
-}));
+// ── Security and utility middleware ───────────────────────────────────────────
+app.use(helmet({ crossOriginResourcePolicy: false })); // Allow serving doctor images
 app.use(cors());
 app.use(compression());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// Static uploads folder
+// ── Static uploads folder ─────────────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/branches', branchRoutes);
-app.use('/api/locations', locationRoutes);
-app.use('/api/departments', departmentRoutes);
-app.use('/api/doctors', doctorRoutes);
-app.use('/api/admins', adminRoutes);
-app.use('/api/roster', rosterRoutes);
-app.use('/api/config', configRoutes);
-app.use('/api/display', displayRoutes);
-app.use('/api/videos', videoRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/sittings', doctorSettingsRoutes);
+// ── Auto-load modules ─────────────────────────────────────────────────────────
+// Each module exports a default router and a BASE_PATH constant.
+// To add a new feature: create a module folder and export BASE_PATH from its routes file.
+// No changes needed here.
 
-// Root route
+const MODULE_ROUTES = [
+  () => import('./modules/auth/auth.routes.js'),
+  () => import('./modules/branch/branch.routes.js'),
+  () => import('./modules/location/location.routes.js'),
+  () => import('./modules/department/department.routes.js'),
+  () => import('./modules/doctor/doctor.routes.js'),
+  () => import('./modules/roster/roster.routes.js'),
+  () => import('./modules/display/display.routes.js'),
+  () => import('./modules/video/video.routes.js'),
+  () => import('./modules/settings/settings.routes.js'),
+  () => import('./modules/settings/admin.routes.js'),
+  () => import('./modules/doctor-settings/doctorSettings.routes.js'),
+  () => import('./modules/config/config.routes.js'),
+];
+
+const loadModules = async () => {
+  for (const loader of MODULE_ROUTES) {
+    const mod = await loader();
+    app.use(`/api/${mod.BASE_PATH}`, mod.default);
+  }
+};
+
+// ── Root health check ─────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({ message: 'Hospital Digital Signage API is running.' });
 });
 
-// Centralized error handler
+// ── Centralized error handler ─────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err.message || err);
   res.status(err.status || 500).json({
@@ -67,17 +66,16 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize pool → start server
+// ── Initialize DB pool → load modules → start server ─────────────────────────
 (async () => {
   try {
     await initializePool();
+    await loadModules();
     app.listen(PORT, () => {
-      console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+      console.log(`✅ Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
     });
   } catch (error) {
     console.error('❌ Server failed to start:', error.message);
     process.exit(1);
   }
 })();
- 
- 

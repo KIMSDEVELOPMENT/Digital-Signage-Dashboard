@@ -1,0 +1,1 @@
+export { getDepartments, createDepartment, updateDepartment, deleteDepartment, getDepartmentDesignations, updateDepartmentDesignations, getDoctorsOrder, updateDoctorsOrder } from '../../controllers/departmentController.js';

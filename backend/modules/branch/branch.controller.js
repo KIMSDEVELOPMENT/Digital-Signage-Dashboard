@@ -1,0 +1,1 @@
+export { getBranches, getBranchById, createBranch, updateBranch, deleteBranch, getBranchDesignationsMaster, updateBranchDesignationsMaster, getAllDesignationsMaster } from '../../controllers/branchController.js';
