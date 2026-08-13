@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../../app/context/AuthContext';
 import api from '../../../common/services/api';
-import { Plus, Trash2, Search, Image, Camera, X, Edit2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Trash2, Search, Image, Camera, X, Edit2, ToggleLeft, ToggleRight, Lock } from 'lucide-react';
 import { TableRowSkeleton } from '../../../common/components/Skeleton';
 import Pagination from '../../../common/components/Pagination';
 import Modal from '../../../common/components/Modal';
@@ -12,7 +12,7 @@ import getCroppedImg from '../../../common/utils/cropImage';
 const Doctor = () => {
   const { user, hasPermission } = useAuth();
   const [doctors, setDoctors] = useState([]);
-  
+
   // Dynamic masters
   const [branches, setBranches] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -24,13 +24,13 @@ const Doctor = () => {
   const [filterDepartmentsList, setFilterDepartmentsList] = useState([]);
 
   const [loading, setLoading] = useState(true);
-  
+
   // Search & Filter state
   const [search, setSearch] = useState('');
   const [filterBranch, setFilterBranch] = useState('');
   const [filterLocation, setFilterLocation] = useState('');
   const [filterDept, setFilterDept] = useState('');
-  
+
   // Pagination & Sorting state
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -42,7 +42,7 @@ const Doctor = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     employee_id: '',
     name: '',
@@ -100,11 +100,11 @@ const Doctor = () => {
     : branches.filter((b) => (user.permissions?.branches || []).includes(b.name));
 
   // Form Temp Location Dropdown
-  const tempLocationsList = tempBranch 
-    ? locations.filter((l) => l.branch_id === parseInt(tempBranch, 10)) 
+  const tempLocationsList = tempBranch
+    ? locations.filter((l) => l.branch_id === parseInt(tempBranch, 10))
     : [];
 
-  const tempDepartmentsList = tempLocation 
+  const tempDepartmentsList = tempLocation
     ? departments.filter((d) => d.location_id === parseInt(tempLocation, 10))
     : [];
 
@@ -134,12 +134,12 @@ const Doctor = () => {
     try {
       setLoading(true);
       const params = { page, limit, sortBy, sortOrder };
-      
+
       if (currentSearch) params.search = currentSearch;
       if (filterBranch) params.branch_id = filterBranch;
       if (filterLocation) params.location_id = filterLocation;
       if (filterDept) params.department_id = filterDept;
-      
+
       const res = await api.get('/doctors', { params });
       setDoctors(res.data.data);
       setPagination(res.data.pagination);
@@ -227,11 +227,11 @@ const Doctor = () => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      
+
       const res = await api.post('/doctors/upload-bulk', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      
+
       toast.success(res.data.message || 'Bulk upload successful!', { id: loadToast, duration: 5000 });
       if (res.data.errors && res.data.errors.length > 0) {
         toast((t) => (
@@ -276,11 +276,11 @@ const Doctor = () => {
       toast.error('Please select Branch, Location, and Department.');
       return;
     }
-    
+
     const did = parseInt(tempDept, 10);
     const lid = parseInt(tempLocation, 10);
     const bid = parseInt(tempBranch, 10);
-    
+
     const isDuplicate = formData.assignments.some(a => a.branch_id === bid && a.location_id === lid && a.department_id === did);
     if (isDuplicate) {
       toast.error('This assignment is already added.');
@@ -296,11 +296,11 @@ const Doctor = () => {
     const branchName = branches.find(b => b.id === bid)?.name;
     const locName = locations.find(l => l.id === lid)?.name;
     const deptName = departments.find(d => d.id === did)?.name;
-    
+
     setFormData({
       ...formData,
-      assignments: [...formData.assignments, { 
-        branch_id: bid, location_id: lid, department_id: did, 
+      assignments: [...formData.assignments, {
+        branch_id: bid, location_id: lid, department_id: did,
         branch_name: branchName, location_name: locName, department_name: deptName,
         shift_time: tempShiftTime.trim()
       }]
@@ -329,7 +329,7 @@ const Doctor = () => {
       toast.error('Doctor name is required.');
       return;
     }
-    
+
     name = 'Dr. ' + name.replace(/^Dr\.?\s*/i, '').trim().toUpperCase();
 
     setSubmitting(true);
@@ -428,7 +428,7 @@ const Doctor = () => {
 
   const getFullPhotoUrl = (url) => {
     if (!url) return '';
-    return `http://localhost:5000${url}`;
+    return `http://${window.location.hostname}:5000${url}`;
   };
 
   const getSortIcon = (column) => {
@@ -575,78 +575,77 @@ const Doctor = () => {
                   const assignments = doc.assignments || [];
 
                   return (
-                  <tr key={doc.id} className="hover:bg-slate-800/20 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full border border-slate-800 overflow-hidden bg-slate-900 flex items-center justify-center shrink-0">
-                          {doc.photo_url ? (
-                            <img src={getFullPhotoUrl(doc.photo_url)} alt={doc.name} className="w-full h-full object-cover" loading="lazy" />
-                          ) : (
-                            <Image className="w-4 h-4 text-slate-600" />
+                    <tr key={doc.id} className="hover:bg-slate-800/20 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full border border-slate-800 overflow-hidden bg-slate-900 flex items-center justify-center shrink-0">
+                            {doc.photo_url ? (
+                              <img src={getFullPhotoUrl(doc.photo_url)} alt={doc.name} className="w-full h-full object-cover" loading="lazy" />
+                            ) : (
+                              <Image className="w-4 h-4 text-slate-600" />
+                            )}
+                          </div>
+                          <div>
+                            <span className="font-semibold text-white block">{doc.name}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 font-mono text-xs text-slate-300">{doc.employee_id}</td>
+                      <td className="px-6 py-4 text-slate-300">{doc.designation}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-2">
+                          {assignments.map((assignment) => (
+                            <span key={`${assignment.department_id}-${assignment.branch_id}-${assignment.location_id}`} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 w-fit">
+                              {assignment.department_name}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-2">
+                          {assignments.map((assignment) => (
+                            <span key={`${assignment.branch_id}-${assignment.location_id}`} className="px-2 py-1 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 w-fit">
+                              {assignment.branch_name}{assignment.shift_time ? <span className="text-blue-300 font-medium ml-1">({assignment.shift_time})</span> : ''}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-2">
+                          {assignments.map((assignment) => (
+                            <span key={`${assignment.branch_id}-${assignment.location_id}-location`} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 w-fit">
+                              {assignment.location_name}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => handleToggleStatus(doc)}
+                          disabled={!canUpdate}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${doc.status
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                              : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                            }`}
+                        >
+                          {doc.status ? 'Active' : 'Inactive'}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2 transition-opacity">
+                          {canUpdate && (
+                            <button onClick={() => handleEdit(doc)} className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-emerald-400/10 rounded-lg transition-colors cursor-pointer" title="Edit Doctor">
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          {user.role === 'super_admin' && (
+                            <button onClick={() => handleDeleteDoctor(doc.id, doc.name)} className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors cursor-pointer" title="Delete Doctor">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
-                        <div>
-                          <span className="font-semibold text-white block">{doc.name}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 font-mono text-xs text-slate-300">{doc.employee_id}</td>
-                    <td className="px-6 py-4 text-slate-300">{doc.designation}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-2">
-                        {assignments.map((assignment) => (
-                          <span key={`${assignment.department_id}-${assignment.branch_id}-${assignment.location_id}`} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 w-fit">
-                            {assignment.department_name}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-2">
-                        {assignments.map((assignment) => (
-                          <span key={`${assignment.branch_id}-${assignment.location_id}`} className="px-2 py-1 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 w-fit">
-                            {assignment.branch_name}{assignment.shift_time ? <span className="text-blue-300 font-medium ml-1">({assignment.shift_time})</span> : ''}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-2">
-                        {assignments.map((assignment) => (
-                          <span key={`${assignment.branch_id}-${assignment.location_id}-location`} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 w-fit">
-                            {assignment.location_name}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => handleToggleStatus(doc)}
-                        disabled={!canUpdate}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                          doc.status
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
-                        }`}
-                      >
-                        {doc.status ? 'Active' : 'Inactive'}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2 transition-opacity">
-                        {canUpdate && (
-                          <button onClick={() => handleEdit(doc)} className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-emerald-400/10 rounded-lg transition-colors cursor-pointer" title="Edit Doctor">
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        )}
-                        {user.role === 'super_admin' && (
-                          <button onClick={() => handleDeleteDoctor(doc.id, doc.name)} className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors cursor-pointer" title="Delete Doctor">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                    </tr>
                   );
                 })
               ) : (
@@ -684,217 +683,249 @@ const Doctor = () => {
         closeOnBackdropClick={false}
         closeOnEscape={false}
       >
-          {cropModalOpen ? (
-            <div className="space-y-4">
-              <div className="relative w-full h-80 bg-slate-900 rounded-xl overflow-hidden border border-slate-700">
-                <Cropper
-                  image={tempImageSrc}
-                  crop={crop}
-                  zoom={zoom}
-                  aspect={1}
-                  cropShape="round"
-                  showGrid={false}
-                  onCropChange={setCrop}
-                  onCropComplete={onCropComplete}
-                  onZoomChange={setZoom}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-300">Zoom</label>
-                <input
-                  type="range"
-                  value={zoom}
-                  min={1}
-                  max={3}
-                  step={0.1}
-                  aria-labelledby="Zoom"
-                  onChange={(e) => setZoom(e.target.value)}
-                  className="w-full accent-emerald-500"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setCropModalOpen(false); setTempImageSrc(null); }}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCropSave}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors font-medium text-sm flex items-center gap-2 shadow-lg shadow-emerald-500/20"
-                >
-                  Apply Crop
-                </button>
-              </div>
+        {cropModalOpen ? (
+          <div className="space-y-4">
+            <div className="relative w-full h-80 bg-slate-900 rounded-xl overflow-hidden border border-slate-700">
+              <Cropper
+                image={tempImageSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={setCrop}
+                onCropComplete={onCropComplete}
+                onZoomChange={setZoom}
+              />
             </div>
-          ) : (
-        <form onSubmit={handleAddDoctor} className="space-y-5">
-          <div className="flex flex-col items-center justify-center p-6 border border-dashed border-slate-700/60 rounded-2xl bg-slate-900/30 group transition-all hover:bg-slate-900/50 hover:border-emerald-500/50">
-            {photoPreview ? (
-              <div className="relative w-24 h-24 rounded-full border border-slate-700/60 overflow-hidden shadow-inner group-hover:border-emerald-500/50 transition-colors">
-                <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
-                <button type="button" onClick={() => { setPhotoFile(null); setPhotoPreview(''); }} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity cursor-pointer">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center justify-center cursor-pointer space-y-2">
-                <div className="text-center">
-                  <p className="text-sm font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors">Upload Photo</p>
-                        <span className="text-slate-400 block mt-1">JPG, PNG or WEBP (Max 12MB)</span>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-semibold text-slate-300">Zoom</label>
+              <input
+                type="range"
+                value={zoom}
+                min={1}
+                max={3}
+                step={0.1}
+                aria-labelledby="Zoom"
+                onChange={(e) => setZoom(e.target.value)}
+                className="w-full accent-emerald-500"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => { setCropModalOpen(false); setTempImageSrc(null); }}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCropSave}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors font-medium text-sm flex items-center gap-2 shadow-lg shadow-emerald-500/20"
+              >
+                Apply Crop
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleAddDoctor} className="space-y-5">
+            <div className="flex flex-col items-center justify-center p-6 border border-dashed border-slate-700/60 rounded-2xl bg-slate-900/30 group transition-all hover:bg-slate-900/50 hover:border-emerald-500/50">
+              {photoPreview ? (
+                <div className="relative w-24 h-24 rounded-full border border-slate-700/60 overflow-hidden shadow-inner group-hover:border-emerald-500/50 transition-colors">
+                  <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                  <button type="button" onClick={() => { setPhotoFile(null); setPhotoPreview(''); }} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 transition-opacity cursor-pointer">
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
-                <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
-              </label>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Employee ID</label>
-              <input type="text" placeholder="e.g. EMP1024" value={formData.employee_id} onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })} className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner" />
+              ) : (
+                <label className="flex flex-col items-center justify-center cursor-pointer space-y-2">
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-slate-300 group-hover:text-emerald-400 transition-colors">Upload Photo</p>
+                    <span className="text-slate-400 block mt-1">JPG, PNG or WEBP (Max 12MB)</span>
+                  </div>
+                  <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                </label>
+              )}
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Doctor Name</label>
-              <div className="flex bg-[#070b14] border border-slate-800/80 rounded-xl focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 shadow-inner overflow-hidden transition-colors">
-                <span className="flex items-center justify-center px-4 bg-slate-800/50 border-r border-slate-800/80 text-slate-400 font-semibold text-sm select-none">
-                  Dr.
-                </span>
-                <input type="text" placeholder="John Doe" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="flex-1 px-3 py-3 text-sm bg-transparent border-none focus:outline-none text-white placeholder-slate-600" />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Employee ID</label>
+                <input type="text" placeholder="e.g. EMP1024" value={formData.employee_id} onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })} className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Doctor Name</label>
+                <div className="flex bg-[#070b14] border border-slate-800/80 rounded-xl focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 shadow-inner overflow-hidden transition-colors">
+                  <span className="flex items-center justify-center px-4 bg-slate-800/50 border-r border-slate-800/80 text-slate-400 font-semibold text-sm select-none">
+                    Dr.
+                  </span>
+                  <input type="text" placeholder="John Doe" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="flex-1 px-3 py-3 text-sm bg-transparent border-none focus:outline-none text-white placeholder-slate-600" />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Designation</label>
-            {designationsMaster.length > 0 ? (
-              <>
-                <select
-                  value={showCustomDesignation ? '__custom__' : (formData.designation || '')}
-                  onChange={(e) => {
-                    if (e.target.value === '__custom__') {
-                      setShowCustomDesignation(true);
-                      setFormData({ ...formData, designation: '' });
-                    } else {
-                      setShowCustomDesignation(false);
-                      setFormData({ ...formData, designation: e.target.value });
-                    }
-                  }}
-                  className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white transition-colors shadow-inner"
-                >
-                  <option value="">Select Designation</option>
-                  {designationsMaster.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                  <option value="__custom__">── Enter custom designation ──</option>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Designation</label>
+              {designationsMaster.length > 0 ? (
+                <>
+                  <select
+                    value={showCustomDesignation ? '__custom__' : (formData.designation || '')}
+                    onChange={(e) => {
+                      if (e.target.value === '__custom__') {
+                        setShowCustomDesignation(true);
+                        setFormData({ ...formData, designation: '' });
+                      } else {
+                        setShowCustomDesignation(false);
+                        setFormData({ ...formData, designation: e.target.value });
+                      }
+                    }}
+                    className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white transition-colors shadow-inner"
+                  >
+                    <option value="">Select Designation</option>
+                    {designationsMaster.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                    <option value="__custom__">── Enter custom designation ──</option>
+                  </select>
+                  {showCustomDesignation && (
+                    <input
+                      type="text"
+                      placeholder="e.g. Consultant Cardiologist"
+                      value={formData.designation}
+                      onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-emerald-500/50 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner mt-2"
+                      autoFocus
+                    />
+                  )}
+                </>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="e.g. Consultant Cardiologist"
+                  value={formData.designation}
+                  onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner"
+                />
+              )}
+            </div>
+
+            <div className="space-y-3 p-4 border border-slate-800/60 rounded-2xl bg-slate-900/10">
+              <label className="text-[11px] font-bold text-slate-200 uppercase tracking-wider block">
+                Configuration
+              </label>
+
+              <div className="flex flex-col gap-3">
+                <select value={tempBranch} onChange={(e) => { setTempBranch(e.target.value); setTempLocation(''); setTempDept(''); }} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 shadow-inner">
+                  <option value="">Select Branch</option>
+                  {allowedBranches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
-                {showCustomDesignation && (
+                <select disabled={!tempBranch} value={tempLocation} onChange={(e) => { setTempLocation(e.target.value); setTempDept(''); }} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 disabled:opacity-50 shadow-inner cursor-pointer">
+                  <option value="">Select Location</option>
+                  {tempLocationsList.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+                <select disabled={!tempLocation} value={tempDept} onChange={(e) => setTempDept(e.target.value)} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 disabled:opacity-50 cursor-pointer shadow-inner">
+                  <option value="">Select Department</option>
+                  {tempDepartmentsList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+
+                <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="e.g. Consultant Cardiologist"
-                    value={formData.designation}
-                    onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-emerald-500/50 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner mt-2"
-                    autoFocus
+                    placeholder="Shift Time (e.g. 10:00 AM - 02:00 PM)"
+                    value={tempShiftTime}
+                    onChange={(e) => setTempShiftTime(e.target.value)}
+                    className="flex-1 px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 shadow-inner placeholder-slate-600"
                   />
-                )}
-              </>
-            ) : (
-              <input
-                type="text"
-                placeholder="e.g. Consultant Cardiologist"
-                value={formData.designation}
-                onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-white placeholder-slate-600 transition-colors shadow-inner"
-              />
-            )}
-          </div>
-
-          <div className="space-y-3 p-4 border border-slate-800/60 rounded-2xl bg-slate-900/10">
-            <label className="text-[11px] font-bold text-slate-200 uppercase tracking-wider block">
-              Configuration
-            </label>
-            
-            <div className="flex flex-col gap-3">
-              <select value={tempBranch} onChange={(e) => { setTempBranch(e.target.value); setTempLocation(''); setTempDept(''); }} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 shadow-inner">
-                <option value="">Select Branch</option>
-                {allowedBranches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-              <select disabled={!tempBranch} value={tempLocation} onChange={(e) => { setTempLocation(e.target.value); setTempDept(''); }} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 disabled:opacity-50 shadow-inner cursor-pointer">
-                <option value="">Select Location</option>
-                {tempLocationsList.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-              <select disabled={!tempLocation} value={tempDept} onChange={(e) => setTempDept(e.target.value)} className="w-full px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 disabled:opacity-50 cursor-pointer shadow-inner">
-                <option value="">Select Department</option>
-                {tempDepartmentsList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-              
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  placeholder="Shift Time (e.g. 10:00 AM - 02:00 PM)" 
-                  value={tempShiftTime} 
-                  onChange={(e) => setTempShiftTime(e.target.value)} 
-                  className="flex-1 px-4 py-2.5 rounded-xl text-sm bg-[#070b14] border border-slate-800/80 focus:border-emerald-500 focus:outline-none text-slate-300 shadow-inner placeholder-slate-600" 
-                />
-                <button 
-                  type="button" 
-                  onClick={handleAddAssignmentClick} 
-                  className="px-4 py-2.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-xl font-medium text-sm transition-colors whitespace-nowrap"
-                >
-                  Add
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleAddAssignmentClick}
+                    className="px-4 py-2.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-xl font-medium text-sm transition-colors whitespace-nowrap"
+                  >
+                    Add
+                  </button>
+                </div>
               </div>
+
+              {formData.assignments.length > 0 ? (
+                <div className="flex flex-col gap-2 mt-3 max-h-36 overflow-y-auto pr-2 custom-scrollbar">
+                  {formData.assignments.map((a, idx) => {
+                    // Branch-scoped: admin can only remove assignments from their own branches
+                    const isOwnBranch = user.role === 'super_admin' ||
+                      (user.permissions?.branches || []).includes(a.branch_name);
+                    return (
+                      <div
+                        key={idx}
+                        className={`flex items-center justify-between px-3 py-2 border rounded-lg text-xs ${
+                          isOwnBranch
+                            ? 'bg-slate-950/40 border-slate-800/40 text-slate-300'
+                            : 'bg-slate-900/20 border-slate-700/30 text-slate-500'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                          <span className={`font-medium ${isOwnBranch ? 'text-emerald-400' : 'text-slate-500'}`}>
+                            {a.branch_name}
+                          </span>
+                          <span className="text-slate-600">/</span>
+                          <span className="truncate">{a.location_name}</span>
+                          <span className="text-slate-600 px-1">&bull;</span>
+                          <span className={`truncate ${isOwnBranch ? 'text-slate-200' : 'text-slate-500'}`}>
+                            {a.department_name}
+                          </span>
+                          {a.shift_time && (
+                            <>
+                              <span className="text-slate-600 px-1">|</span>
+                              <span className={`font-medium whitespace-nowrap ${isOwnBranch ? 'text-emerald-400' : 'text-slate-600'}`}>
+                                {a.shift_time}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        {isOwnBranch ? (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAssignment(idx)}
+                            className="text-slate-500 hover:text-rose-400 p-1 cursor-pointer transition-colors shrink-0"
+                            title="Remove Assignment"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <span
+                            className="p-1 text-slate-600 shrink-0"
+                            title="Managed by another branch — read only"
+                          >
+                            <Lock className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 italic mt-2">No configuration added yet.</p>
+              )}
             </div>
 
-            {formData.assignments.length > 0 ? (
-              <div className="flex flex-col gap-2 mt-3 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
-                {formData.assignments.map((a, idx) => (
-                  <div key={idx} className="flex items-center justify-between px-3 py-2 bg-slate-950/40 border border-slate-800/40 rounded-lg text-xs text-slate-300">
-                    <div className="flex items-center gap-1.5 overflow-hidden">
-                      <span className="font-medium text-emerald-400">{a.branch_name}</span>
-                      <span className="text-slate-500">/</span>
-                      <span className="truncate">{a.location_name}</span>
-                      <span className="text-slate-500 px-1">&bull;</span>
-                      <span className="truncate text-slate-200">{a.department_name}</span>
-                      {a.shift_time && (
-                        <>
-                          <span className="text-slate-500 px-1">|</span>
-                          <span className="text-emerald-400 font-medium whitespace-nowrap">{a.shift_time}</span>
-                        </>
-                      )}
-                    </div>
-                    <button type="button" onClick={() => handleRemoveAssignment(idx)} className="text-slate-500 hover:text-rose-400 p-1 cursor-pointer transition-colors" title="Remove Assignment">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-slate-500 italic mt-2">No configuration added yet.</p>
-            )}
-          </div>
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-slate-200 uppercase tracking-wider block">
+                Active Status
+              </label>
+              <button type="button" onClick={() => setFormData({ ...formData, status: !formData.status })} className="flex items-center gap-3 font-semibold text-slate-200 cursor-pointer text-sm w-fit transition-opacity hover:opacity-80">
+                {formData.status ? <ToggleRight className="w-6 h-6 text-emerald-400" /> : <ToggleLeft className="w-6 h-6 text-slate-500" />}
+                {formData.status ? 'Active' : 'Inactive'}
+              </button>
+            </div>
 
-          <div className="space-y-2">
-            <label className="text-[11px] font-bold text-slate-200 uppercase tracking-wider block">
-              Active Status
-            </label>
-            <button type="button" onClick={() => setFormData({ ...formData, status: !formData.status })} className="flex items-center gap-3 font-semibold text-slate-200 cursor-pointer text-sm w-fit transition-opacity hover:opacity-80">
-              {formData.status ? <ToggleRight className="w-6 h-6 text-emerald-400" /> : <ToggleLeft className="w-6 h-6 text-slate-500" />}
-              {formData.status ? 'Active' : 'Inactive'}
-            </button>
-          </div>
-
-          <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800/60 mt-4">
-            <button type="button" onClick={() => { setIsModalOpen(false); resetForm(); }} className="px-6 py-2.5 bg-transparent border border-slate-700 hover:bg-slate-800 text-slate-300 font-semibold rounded-xl text-sm transition-colors cursor-pointer">
-              Cancel
-            </button>
-            <button type="submit" disabled={submitting} className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-bold rounded-xl text-sm transition-colors cursor-pointer disabled:opacity-50">
-              {submitting ? 'Processing...' : (editingDoctor ? 'Save Changes' : 'Register Doctor')}
-            </button>
-          </div>
-        </form>
+            <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800/60 mt-4">
+              <button type="button" onClick={() => { setIsModalOpen(false); resetForm(); }} className="px-6 py-2.5 bg-transparent border border-slate-700 hover:bg-slate-800 text-slate-300 font-semibold rounded-xl text-sm transition-colors cursor-pointer">
+                Cancel
+              </button>
+              <button type="submit" disabled={submitting} className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-bold rounded-xl text-sm transition-colors cursor-pointer disabled:opacity-50">
+                {submitting ? 'Processing...' : (editingDoctor ? 'Save Changes' : 'Register Doctor')}
+              </button>
+            </div>
+          </form>
         )}
       </Modal>
     </div>

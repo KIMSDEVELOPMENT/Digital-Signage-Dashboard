@@ -134,7 +134,7 @@ export async function createDoctor(req, res) {
   if (designation) {
     designation = designation.replace(/\s+/g, ' ');
   }
-  
+
   let parsedAssignments = [];
   if (assignments) {
     try {
@@ -235,13 +235,26 @@ export async function updateDoctor(req, res) {
     }
 
     if (req.user && req.user.role === 'normal_admin') {
-      const hasAnyAccess = await Promise.all(
-        (existing.assignments || []).map(a => userRepository.hasLocationAccess(req.user.id, a.branch_name, a.location_name))
+      // Get the admin's allowed branch names (branch-level scoping, not location-level)
+      const userBranchNames = await userRepository.getUserBranches(req.user.id);
+
+      // Preserve assignments from branches outside the admin's scope (read-only to them)
+      const preservedAssignments = (existing.assignments || [])
+        .filter(ea => !userBranchNames.includes(ea.branch_name))
+        .map(ea => ({
+          branch_id: ea.branch_id,
+          location_id: ea.location_id,
+          department_id: ea.department_id,
+          shift_time: ea.shift_time || null,
+        }));
+
+      // Only accept the assignments from the frontend that belong to the admin's own branches
+      const ownBranchAssignments = parsedAssignments.filter(pa =>
+        userBranchNames.includes(pa.branch_name)
       );
-      if (!hasAnyAccess.some(Boolean)) {
-        if (req.file) fs.unlinkSync(req.file.path);
-        return res.status(403).json({ message: 'You do not have permission to edit doctors outside your assigned locations.' });
-      }
+
+      // Merge: preserved out-of-scope + admin's own-branch changes
+      parsedAssignments = [...preservedAssignments, ...ownBranchAssignments];
     }
 
     const empTaken = await doctorRepository.isEmployeeIdTakenGlobally(employee_id, id);
@@ -342,16 +355,16 @@ export async function downloadDoctorTemplate(req, res) {
       ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'SSCC', 'KSS', 'MON, TUE, WED, THU, FRI, SAT', '04:00 PM - 08:00 PM'],
       ['Dr. JANE SMITH', '002', 'Cardiologist', 'Cardiology', 'PBMH', 'B BLOCK', 'MON, WED, FRI', '09:00 AM - 05:00 PM']
     ]);
-    
+
     // Auto-size columns slightly
     const wscols = [
-      {wch: 25}, {wch: 15}, {wch: 25}, {wch: 20}, {wch: 20}, {wch: 20}, {wch: 30}, {wch: 25}
+      { wch: 25 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 25 }
     ];
     ws['!cols'] = wscols;
 
     xlsx.utils.book_append_sheet(wb, ws, "Template");
     const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    
+
     res.setHeader('Content-Disposition', 'attachment; filename="doctor_upload_template.xlsx"');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     return res.send(buffer);
@@ -399,7 +412,7 @@ export async function uploadBulkDoctors(req, res) {
       branchCache[b.name.toLowerCase()] = b.id;
       branchNameById[b.id] = b.name;
     });
-    
+
     const allLocations = await locationRepository.findAll();
     allLocations.forEach((l) => {
       locCache[`${l.branch_id}_${l.name.toLowerCase()}`] = l.id;
@@ -523,7 +536,7 @@ export async function uploadBulkDoctors(req, res) {
     // Process grouped doctors
     for (const [empId, docData] of doctorsMap.entries()) {
       if (docData.assignments.length === 0) continue;
-      
+
       // Check if exists
       const existing = await doctorRepository.findByEmployeeId(empId);
       if (existing) {
@@ -536,7 +549,7 @@ export async function uploadBulkDoctors(req, res) {
 
         // Find which branches are in the new upload
         const newBranchIds = [...new Set(docData.assignments.map(a => a.branch_id))];
-        
+
         // Keep existing assignments if their branch_id is NOT in the new upload
         const preservedAssignments = (existing.assignments || [])
           .filter(ea => !newBranchIds.includes(ea.branch_id))
@@ -546,7 +559,7 @@ export async function uploadBulkDoctors(req, res) {
             department_id: ea.department_id,
             shift_time: ea.shift_time || null
           }));
-        
+
         // Combine preserved assignments with the new ones
         const mergedAssignments = [...preservedAssignments, ...docData.assignments];
 
@@ -595,7 +608,7 @@ export async function uploadBulkDoctors(req, res) {
       responseMsg += ` Skipped ${errorCount} row(s) due to validation/master data issues.`;
     }
 
-    return res.status(200).json({ 
+    return res.status(200).json({
       message: responseMsg,
       errors: errorDetails
     });
