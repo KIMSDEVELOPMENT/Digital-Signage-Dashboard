@@ -15,7 +15,9 @@ import {
   Save,
   X,
   Plus,
-  Search
+  Search,
+  Archive,
+  Download
 } from 'lucide-react';
 import { TableSkeleton } from '../../../common/components/Skeleton';
 import Pagination from '../../../common/components/Pagination';
@@ -45,6 +47,11 @@ const Roster = () => {
     month: 'short',
     day: 'numeric'
   });
+  
+  // Tabs State
+  const [activeTab, setActiveTab] = useState('current');
+  const [archives, setArchives] = useState([]);
+  const [loadingArchives, setLoadingArchives] = useState(false);
   
   // Edit State
   const [editingRosterId, setEditingRosterId] = useState(null);
@@ -134,6 +141,27 @@ const Roster = () => {
   useEffect(() => {
     fetchRoster();
   }, [selectedBranch, selectedLocation, selectedDate]);
+
+  const fetchArchives = async () => {
+    try {
+      setLoadingArchives(true);
+      const res = await api.get('/roster/archive', {
+        params: { branch: selectedBranch || undefined }
+      });
+      setArchives(res.data);
+    } catch (err) {
+      console.error(err);
+      setArchives([]);
+    } finally {
+      setLoadingArchives(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'archives') {
+      fetchArchives();
+    }
+  }, [activeTab, selectedBranch]);
 
   useEffect(() => {
     // If selectedBranch changes and searchBranch is empty, sync it
@@ -230,6 +258,37 @@ const Roster = () => {
     setSelectedDoctor(null);
   };
 
+  const handleDownloadArchive = async (id, filename) => {
+    const loadToast = toast.loading('Downloading file...');
+    try {
+      const response = await api.get(`/roster/archive/download/${id}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('File downloaded successfully!', { id: loadToast });
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to download archived file.', { id: loadToast });
+    }
+  };
+
+  const handleDeleteArchive = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this archived file?')) return;
+    const loadToast = toast.loading('Deleting file...');
+    try {
+      await api.delete(`/roster/archive/${id}`);
+      toast.success('Archived file deleted.', { id: loadToast });
+      fetchArchives();
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to delete archived file.', { id: loadToast });
+    }
+  };
+
   const downloadRosterTemplate = async () => {
     if (!selectedBranch) return;
     const loadToast = toast.loading('Downloading template...');
@@ -294,10 +353,17 @@ const Roster = () => {
       }));
 
       // 3. Import (auto replace)
-      await api.post('/roster/import', { roster: rosterData, replace: true });
+      const importFormData = new FormData();
+      importFormData.append('file', uploadFile);
+      importFormData.append('roster', JSON.stringify(rosterData));
+      importFormData.append('replace', 'true');
+      await api.post('/roster/import', importFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
       
       toast.success("Roster imported successfully!", { id: loadToast });
       fetchRoster();
+      fetchArchives();
     } catch (err) {
       console.error(err);
       const responseData = err.response?.data;
@@ -454,8 +520,23 @@ const Roster = () => {
 
           {/* Right panel: Preview or Today's Roster */}
           <div className="xl:col-span-2 space-y-6">
+            <div className="flex gap-4 border-b border-slate-800/60 pb-2">
+              <button 
+                onClick={() => setActiveTab('current')}
+                className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${activeTab === 'current' ? 'text-emerald-400 border-b-2 border-emerald-400' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Current Schedule
+              </button>
+              <button 
+                onClick={() => setActiveTab('archives')}
+                className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${activeTab === 'archives' ? 'text-emerald-400 border-b-2 border-emerald-400' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Files Archive
+              </button>
+            </div>
             
             {/* 1. Today's Roster Header */}
+            {activeTab === 'current' && (
 
             <div className="glass-panel p-6 rounded-2xl border border-slate-850 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800/30 pb-3">
@@ -652,7 +733,7 @@ const Roster = () => {
                                     <Edit2 className="w-4 h-4" />
                                   </button>
                                 )}
-                                {user?.role === 'super_admin' && (
+                                {(user?.role === 'super_admin' || hasPermission('Duty Roster', 'delete')) && (
                                   <button
                                     onClick={() => handleDeleteManualEntry(item.roster_id)}
                                     className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"
@@ -693,7 +774,90 @@ const Roster = () => {
                 </div>
               )}
             </div>
+            )}
 
+            {/* 2. Files Archive View */}
+            {activeTab === 'archives' && (
+              <div className="glass-panel p-6 rounded-2xl border border-slate-850 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800/30 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Archive className="w-5 h-5 text-emerald-400" />
+                    <div>
+                      <h3 className="font-heading font-semibold text-white">Files Archive</h3>
+                      <p className="text-[10px] text-slate-500 font-medium">History of imported duty rosters</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={fetchArchives}
+                    disabled={loadingArchives}
+                    className="p-2 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-slate-900 hover:text-slate-200 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingArchives ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+
+                {loadingArchives ? (
+                  <TableSkeleton rows={4} cols={5} />
+                ) : archives.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-800/60">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-900/60 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                          <th className="px-4 py-3">Original Filename</th>
+                          <th className="px-4 py-3">Branch</th>
+                          <th className="px-4 py-3">Uploaded By</th>
+                          <th className="px-4 py-3">Uploaded At</th>
+                          <th className="px-4 py-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-850/30">
+                        {archives.map((file) => (
+                          <tr key={file.id} className="hover:bg-slate-900/10 transition-colors">
+                            <td className="px-4 py-3 font-semibold text-white">
+                              <div className="flex items-center gap-2">
+                                <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                                {file.original_filename}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-slate-300">{file.branch_name}</td>
+                            <td className="px-4 py-3 text-slate-300">{file.uploaded_by_name || 'System / Unknown'}</td>
+                            <td className="px-4 py-3 text-slate-400">
+                              {new Date(file.uploaded_at).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => handleDownloadArchive(file.id, file.original_filename)}
+                                  className="p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                                  title="Download File"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </button>
+                                {hasPermission('Duty Roster', 'delete') && (
+                                  <button
+                                    onClick={() => handleDeleteArchive(file.id)}
+                                    className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"
+                                    title="Delete Archived File"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-8 text-center border border-slate-800/40 bg-slate-950/20 rounded-xl">
+                    <Archive className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-slate-400">No archived files found.</p>
+                    <p className="text-xs text-slate-500 mt-1">Successfully imported duty roster files will appear here.</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

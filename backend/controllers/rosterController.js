@@ -7,6 +7,27 @@ import departmentRepository from '../repositories/DepartmentRepository.js';
 import { getPool } from '../config/db.js';
 import { notifyUpdate } from '../utils/sse.js';
 
+// Helper to get local date string YYYY-MM-DD
+function getTodayDateString(d = new Date()) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Helper to format Date or string to YYYY-MM-DD
+function formatDateOnly(val) {
+  if (!val) return '';
+  if (typeof val === 'string') return val.split('T')[0];
+  if (val instanceof Date) {
+    const year = val.getFullYear();
+    const month = String(val.getMonth() + 1).padStart(2, '0');
+    const day = String(val.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  return String(val);
+}
+
 // Resolve url parameters case-insensitively and ignoring non-alphanumeric chars
 async function resolveLocation(branch, locParam) {
   if (!locParam) return null;
@@ -78,15 +99,13 @@ export async function previewRoster(req, res) {
   }
 
   try {
-    // Check if roster already exists for this branch and date
-    if (date) {
-      const existingRoster = await rosterRepository.findRosterByDate({ branch, date });
-      if (existingRoster && existingRoster.length > 0) {
-        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-        return res.status(400).json({ 
-          message: 'A roster has already been uploaded for this date. Please modify or delete existing entries manually.' 
-        });
-      }
+    const todayStr = getTodayDateString();
+    // Validate target date is not in the past
+    if (date && date < todayStr) {
+      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ 
+        message: 'Past rosters cannot be modified. Duty roster modification is only allowed for today and future dates.' 
+      });
     }
 
     const workbook = xlsx.readFile(req.file.path);
@@ -241,6 +260,11 @@ export async function previewRoster(req, res) {
           }
         }
         
+        // Past date validation
+        if (dateStr && dateStr < todayStr) {
+          errors.push(`Row ${rowNum}: Past dates (${dateStr}) cannot be uploaded or modified. Schedule date must be today or a future date.`);
+        }
+
         // Mismatch validation
         if (date && dateStr && dateStr !== date) {
           errors.push(`Row ${rowNum}: Date in excel '${dateStr}' does not match the selected target date '${date}'.`);
@@ -283,7 +307,10 @@ export async function previewRoster(req, res) {
       if (!rowDocName) {
         errors.push(`Row ${rowNum}: Doctor Name is empty.`);
       } else {
-        const docNameLower = rowDocName.toLowerCase();
+        let docNameLower = rowDocName.trim().toLowerCase();
+        if (docNameLower.startsWith('dr. ')) docNameLower = docNameLower.substring(4);
+        else if (docNameLower.startsWith('dr ')) docNameLower = docNameLower.substring(3);
+        docNameLower = docNameLower.trim();
         
         // 1. Validate against DB configuration
         const expectedBlock = docBranchBlockMap[docNameLower];
@@ -358,9 +385,19 @@ export async function previewRoster(req, res) {
 }
 
 export async function importRoster(req, res) {
-  const { roster } = req.body;
+  let roster = req.body.roster;
+  
+  if (typeof roster === 'string') {
+    try {
+      roster = JSON.parse(roster);
+    } catch (e) {
+      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'Invalid roster data format.' });
+    }
+  }
 
   if (!roster || !Array.isArray(roster) || roster.length === 0) {
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     return res.status(400).json({ message: 'Roster data is required.' });
   }
 
@@ -374,7 +411,12 @@ export async function importRoster(req, res) {
     const missingDoctors = [];
     const unauthorizedEmployees = [];
 
+    const todayStr = getTodayDateString();
     for (const item of roster) {
+      if (item.date && item.date < todayStr) {
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        return res.status(400).json({ message: 'Past rosters cannot be modified. Cannot import roster for past dates.' });
+      }
       if (!item.doctor_id) {
          // Skip doctors that were invalid in Excel
          continue;
@@ -415,22 +457,50 @@ export async function importRoster(req, res) {
     }
 
     if (missingDoctors.length > 0) {
+      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(400).json({
         message: `Import aborted. Doctor record(s) not found for: ${missingDoctors.join(', ')}`,
       });
     }
 
     if (unauthorizedEmployees.length > 0) {
+      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(403).json({
         message: `Import aborted. No branch permission for: ${unauthorizedEmployees.join(', ')}`,
       });
     }
 
     await rosterRepository.importRoster(validEntries);
+    
+    // Save file to archive if present
+    if (req.file && validEntries.length > 0) {
+      const branchId = validEntries[0].branch_id;
+      const originalName = req.file.originalname;
+      
+      const uploadDir = 'uploads/rosters';
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      
+      const newFileName = `${Date.now()}-${Math.round(Math.random() * 1E9)}-${originalName}`;
+      const newFilePath = `${uploadDir}/${newFileName}`;
+      
+      fs.renameSync(req.file.path, newFilePath);
+      
+      const pool = getPool();
+      await pool.query(
+        'INSERT INTO roster_archives (original_filename, stored_filepath, branch_id, uploaded_by) VALUES (?, ?, ?, ?)',
+        [originalName, newFilePath, branchId, req.user ? req.user.id : null]
+      );
+    } else if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
     notifyUpdate();
     return res.status(200).json({ message: "Roster imported successfully." });
   } catch (error) {
     console.error('Import roster error:', error);
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     return res.status(500).json({ message: 'Internal server error.' });
   }
 }
@@ -498,6 +568,11 @@ export async function addManualRoster(req, res) {
     return res.status(400).json({ message: 'Date, doctor ID, timing, and branch are required.' });
   }
 
+  const todayStr = getTodayDateString();
+  if (date < todayStr) {
+    return res.status(400).json({ message: 'Past rosters cannot be modified. Cannot add roster entries for past dates.' });
+  }
+
   try {
     const doctor = await doctorRepository.findById(doctor_id);
     if (!doctor) {
@@ -546,11 +621,18 @@ export async function updateManualRoster(req, res) {
   }
 
   try {
+    const entry = await rosterRepository.findById(id);
+    if (!entry) {
+      return res.status(404).json({ message: 'Roster entry not found.' });
+    }
+
+    const entryDate = formatDateOnly(entry.date);
+    const todayStr = getTodayDateString();
+    if (entryDate && entryDate < todayStr) {
+      return res.status(400).json({ message: 'Past rosters cannot be modified. Cannot modify roster entries for past dates.' });
+    }
+
     if (req.user && req.user.role === 'normal_admin') {
-      const entry = await rosterRepository.findById(id);
-      if (!entry) {
-        return res.status(404).json({ message: 'Roster entry not found.' });
-      }
       const hasAccess = await userRepository.hasLocationAccess(req.user.id, entry.branch_name, entry.location_name);
       if (!hasAccess) {
         return res.status(403).json({ message: 'You do not have access to edit roster entries for this location.' });
@@ -576,16 +658,147 @@ export async function updateManualRoster(req, res) {
 export async function deleteManualRoster(req, res) {
   const { id } = req.params;
 
-  if (req.user && req.user.role === 'normal_admin') {
-    return res.status(403).json({ message: 'Admin users are not allowed to delete roster entries. Only Super Admins can delete entries.' });
-  }
-
   try {
+    const entry = await rosterRepository.findById(id);
+    if (!entry) {
+      return res.status(404).json({ message: 'Roster entry not found.' });
+    }
+
+    const entryDate = formatDateOnly(entry.date);
+    const todayStr = getTodayDateString();
+    if (entryDate && entryDate < todayStr) {
+      return res.status(400).json({ message: 'Past rosters cannot be modified. Cannot delete roster entries for past dates.' });
+    }
+
+    if (req.user && req.user.role === 'normal_admin') {
+      const hasAccess = await userRepository.hasLocationAccess(req.user.id, entry.branch_name, entry.location_name);
+      if (!hasAccess) {
+        return res.status(403).json({ message: 'You do not have access to delete roster entries for this location.' });
+      }
+    }
+
     await rosterRepository.deleteManualEntry(id);
     notifyUpdate();
     return res.status(200).json({ message: 'Manual roster entry deleted.' });
   } catch (error) {
     console.error('Delete manual roster error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function getArchivedFiles(req, res) {
+  try {
+    const pool = getPool();
+    const { branch } = req.query;
+    let query = `
+      SELECT ra.id, ra.original_filename, ra.uploaded_at, b.name AS branch_name, u.full_name AS uploaded_by_name
+      FROM roster_archives ra
+      JOIN branches b ON ra.branch_id = b.id
+      LEFT JOIN users u ON ra.uploaded_by = u.id
+    `;
+    const params = [];
+    const conditions = [];
+
+    if (req.user && req.user.role === 'normal_admin') {
+      const allowedBranches = await userRepository.getUserBranches(req.user.id);
+      if (allowedBranches.length === 0) {
+        return res.status(200).json([]);
+      }
+      if (branch) {
+        if (!allowedBranches.map(b => b.toLowerCase()).includes(branch.toLowerCase())) {
+          return res.status(403).json({ message: 'You do not have permission for this branch.' });
+        }
+        conditions.push('LOWER(b.name) = LOWER(?)');
+        params.push(branch);
+      } else {
+        conditions.push('b.name IN (?)');
+        params.push(allowedBranches);
+      }
+    } else if (branch) {
+      conditions.push('LOWER(b.name) = LOWER(?)');
+      params.push(branch);
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    query += ' ORDER BY ra.uploaded_at DESC';
+    const [rows] = await pool.query(query, params);
+    
+    return res.status(200).json(rows);
+  } catch (error) {
+    console.error('Get archived files error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function downloadArchivedFile(req, res) {
+  const { id } = req.params;
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query('SELECT * FROM roster_archives WHERE id = ?', [id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'File not found.' });
+    }
+    
+    const fileRecord = rows[0];
+    
+    if (req.user && req.user.role === 'normal_admin') {
+      const [branchRows] = await pool.query('SELECT name FROM branches WHERE id = ?', [fileRecord.branch_id]);
+      const branchName = branchRows.length > 0 ? branchRows[0].name : '';
+      const allowedBranches = await userRepository.getUserBranches(req.user.id);
+      
+      if (!allowedBranches.includes(branchName)) {
+        return res.status(403).json({ message: 'You do not have access to download this file.' });
+      }
+    }
+
+    if (!fs.existsSync(fileRecord.stored_filepath)) {
+      return res.status(404).json({ message: 'Physical file not found on server.' });
+    }
+
+    res.download(fileRecord.stored_filepath, fileRecord.original_filename);
+  } catch (error) {
+    console.error('Download archived file error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}
+
+export async function deleteArchivedFile(req, res) {
+  const { id } = req.params;
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query('SELECT * FROM roster_archives WHERE id = ?', [id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'File not found.' });
+    }
+    
+    const fileRecord = rows[0];
+    
+    if (req.user && req.user.role === 'normal_admin') {
+      const [branchRows] = await pool.query('SELECT name FROM branches WHERE id = ?', [fileRecord.branch_id]);
+      const branchName = branchRows.length > 0 ? branchRows[0].name : '';
+      const allowedBranches = await userRepository.getUserBranches(req.user.id);
+      
+      if (!allowedBranches.includes(branchName)) {
+        return res.status(403).json({ message: 'You do not have access to delete this file.' });
+      }
+    }
+
+    // Delete physical file
+    if (fs.existsSync(fileRecord.stored_filepath)) {
+      fs.unlinkSync(fileRecord.stored_filepath);
+    }
+    
+    // Delete database record
+    await pool.query('DELETE FROM roster_archives WHERE id = ?', [id]);
+    
+    return res.status(200).json({ message: 'Archived file deleted successfully.' });
+  } catch (error) {
+    console.error('Delete archived file error:', error);
     return res.status(500).json({ message: 'Internal server error.' });
   }
 }
