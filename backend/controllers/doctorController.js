@@ -353,7 +353,9 @@ export async function downloadDoctorTemplate(req, res) {
       ['CLINICIAN', 'EMPLOYEE ID', 'TITLE / DESIGNATION', 'DEPARTMENTS', 'BRANCHES', 'LOCATIONS', 'AVAILABLE DAYS', 'SHIFT TIME'],
       ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'PBMH', 'A BLOCK', 'MON, TUE, WED, THU, FRI, SAT', '10:00 AM - 02:00 PM'],
       ['Dr. AMARESH MISHRA', '001', 'SR', 'DERMATOLOGY', 'SSCC', 'KSS', 'MON, TUE, WED, THU, FRI, SAT', '04:00 PM - 08:00 PM'],
-      ['Dr. JANE SMITH', '002', 'Cardiologist', 'Cardiology', 'PBMH', 'B BLOCK', 'MON, WED, FRI', '09:00 AM - 05:00 PM']
+      ['Dr. JANE SMITH', '002', 'Cardiologist', 'Cardiology', 'PBMH', 'B BLOCK', 'MON, WED, FRI', '09:00 AM - 05:00 PM'],
+      ['Dr. RAJESH KUMAR', '003', 'Consultant Neurologist', 'Neurology', 'PBMH', 'A BLOCK', '', ''],
+      ['Dr. PRIYA SHARMA', '004', 'Pediatrician', 'Pediatrics', 'SSCC', 'KSS', 'MON, TUE, THU', '']
     ]);
 
     // Auto-size columns slightly
@@ -427,18 +429,26 @@ export async function uploadBulkDoctors(req, res) {
     const errorDetails = [];
 
     for (const row of data) {
-      const name = row['CLINICIAN']?.toString().trim();
-      let empId = row['EMPLOYEE ID']?.toString().trim();
-      const rawDesignation = row['TITLE / DESIGNATION']?.toString().trim();
+      const name = (row['CLINICIAN'] || row['DOCTOR NAME'] || row['DOCTOR'] || row['NAME'])?.toString().trim();
+      let empId = (row['EMPLOYEE ID'] || row['EMPLOYEE_ID'] || row['EMP ID'] || row['EMPID'] || row['EMPLOYEEID'])?.toString().trim();
+      const rawDesignation = (row['TITLE / DESIGNATION'] || row['TITLE/DESIGNATION'] || row['DESIGNATION'] || row['TITLE'])?.toString().trim();
       const designation = rawDesignation ? rawDesignation.replace(/\s+/g, ' ') : null;
-      const departmentName = row['DEPARTMENTS']?.toString().trim();
-      const branchName = row['BRANCHES']?.toString().trim();
-      const locationName = row['LOCATIONS']?.toString().trim();
-      const rawShiftTime = (row['SHIFT TIME'] || row['TIMING'])?.toString().trim();
+      const departmentName = (row['DEPARTMENTS'] || row['DEPARTMENT'] || row['DEPT'])?.toString().trim();
+      const branchName = (row['BRANCHES'] || row['BRANCH'] || row['SITE'] || row['SITE NAME'])?.toString().trim();
+      const locationName = (row['LOCATIONS'] || row['LOCATION'] || row['BLOCK'] || row['BLOCK NAME'])?.toString().trim();
+      const rawShiftTime = (row['SHIFT TIME'] || row['SHIFT TIMING'] || row['TIMING'] || row['SHIFT'] || row['SHIFTS'])?.toString().trim() || null;
 
+      // Mandatory fields check (AVAILABLE DAYS and SHIFT TIME are strictly optional)
       if (!name || !empId || !designation || !departmentName || !branchName || !locationName) {
         errorCount++;
-        errorDetails.push(`Row skipped for Employee ID '${empId || 'N/A'}': Missing required fields.`);
+        const missing = [];
+        if (!name) missing.push('CLINICIAN');
+        if (!empId) missing.push('EMPLOYEE ID');
+        if (!designation) missing.push('TITLE / DESIGNATION');
+        if (!departmentName) missing.push('DEPARTMENTS');
+        if (!branchName) missing.push('BRANCHES');
+        if (!locationName) missing.push('LOCATIONS');
+        errorDetails.push(`Row skipped for Employee ID '${empId || 'N/A'}': Missing mandatory field(s): ${missing.join(', ')}.`);
         continue;
       }
 
@@ -474,7 +484,8 @@ export async function uploadBulkDoctors(req, res) {
         continue;
       }
 
-      const rawDays = row['AVAILABLE DAYS']?.toString().trim();
+      // Available Days (optional)
+      const rawDays = (row['AVAILABLE DAYS'] || row['AVAILABLE_DAYS'] || row['DAYS'] || row['AVAILABLE DAY'])?.toString().trim();
       let parsedDays = null;
       if (rawDays) {
         const VALID_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
@@ -584,7 +595,7 @@ export async function uploadBulkDoctors(req, res) {
         await doctorRepository.syncAssignments(newId, docData.assignments);
       }
 
-      // Upsert display_days per branch/location assignment.
+      // Upsert display_days per branch/location assignment if provided
       if (docData.branch_days && Object.keys(docData.branch_days).length > 0) {
         for (const assignment of docData.assignments) {
           const branchName = branchNameById[assignment.branch_id];
