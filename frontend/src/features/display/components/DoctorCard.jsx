@@ -5,7 +5,8 @@ const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 const getFullPhotoUrl = (url) => {
   if (!url) return '';
-  return `http://${window.location.hostname}:5000${url}`;
+  const baseMediaUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : window.location.origin;
+  return `${baseMediaUrl}${url}`;
 };
 
 /**

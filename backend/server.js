@@ -8,16 +8,15 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { initializePool } from './config/db.js';
 
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '.env'), override: true });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ── Security and utility middleware ───────────────────────────────────────────
-app.use(helmet({ crossOriginResourcePolicy: false })); // Allow serving doctor images
+// app.use(helmet()); // Disabled for local HTTP deployment over IP to prevent HTTPS forcing and COOP issues
 app.use(cors());
 app.use(compression());
 app.use(express.json());
@@ -53,11 +52,6 @@ const loadModules = async () => {
   }
 };
 
-// ── Root health check ─────────────────────────────────────────────────────────
-app.get('/', (req, res) => {
-  res.json({ message: 'Hospital Digital Signage API is running.' });
-});
-
 // ── Centralized error handler ─────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err.message || err);
@@ -71,6 +65,14 @@ app.use((err, req, res, next) => {
   try {
     await initializePool();
     await loadModules();
+
+    // ── Serve React Frontend ──────────────────────────────────────────────────────
+    app.use(express.static(path.join(__dirname, 'dist')));
+
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(__dirname, 'dist/index.html'));
+    });
+
     app.listen(PORT, () => {
       console.log(`✅ Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
     });

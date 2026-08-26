@@ -89,7 +89,7 @@ const DoctorSettings = () => {
 
   // ─── SSE: Real-time sync when super-admin changes dept status ─────────────
   useEffect(() => {
-    const baseUrl = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api`;
+    const baseUrl = import.meta.env.VITE_API_URL || `${window.location.origin}/api`;
     const token = localStorage.getItem('token');
 
     const connect = () => {
@@ -299,7 +299,7 @@ const DoctorSettings = () => {
                     >
                       {doc.photo_url ? (
                         <img
-                          src={doc.photo_url.startsWith('http') ? doc.photo_url : `http://${window.location.hostname}:5000${doc.photo_url}`}
+                          src={doc.photo_url.startsWith('http') ? doc.photo_url : `${import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : window.location.origin}${doc.photo_url}`}
                           alt={doc.name}
                           className="w-full h-full object-cover"
                         />

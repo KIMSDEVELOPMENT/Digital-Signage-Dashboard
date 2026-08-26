@@ -579,30 +579,34 @@ export async function addManualRoster(req, res) {
       return res.status(404).json({ message: 'Doctor not found.' });
     }
 
+    const targetAssignments = doctor.assignments.filter(a => 
+      a.branch_name && a.branch_name.toLowerCase() === branch.toLowerCase() && 
+      (!location || (a.location_name && a.location_name.toLowerCase() === location.toLowerCase()))
+    );
+
+    if (targetAssignments.length === 0) {
+      return res.status(400).json({ message: 'Doctor is not assigned to this branch or block.' });
+    }
+
     if (req.user && req.user.role === 'normal_admin') {
-      const assignment = doctor.assignments.find(a => a.branch_name && a.branch_name.toLowerCase() === branch.toLowerCase() && (!location || (a.location_name && a.location_name.toLowerCase() === location.toLowerCase())));
-      if (assignment) {
+      // Check permissions for all target assignments
+      for (const assignment of targetAssignments) {
         const hasAccess = await userRepository.hasLocationAccess(req.user.id, branch, assignment.location_name);
         if (!hasAccess) {
-          return res.status(403).json({ message: 'You do not have permission for this block.' });
+          return res.status(403).json({ message: `You do not have permission for the block: ${assignment.location_name}.` });
         }
-      } else {
-        return res.status(403).json({ message: 'Doctor is not assigned to this branch.' });
       }
     }
 
-    const assignment = doctor.assignments.find(a => a.branch_name && a.branch_name.toLowerCase() === branch.toLowerCase() && (!location || (a.location_name && a.location_name.toLowerCase() === location.toLowerCase())));
-    if (!assignment) {
-      return res.status(400).json({ message: 'Doctor is not assigned to this branch.' });
+    for (const assignment of targetAssignments) {
+      await rosterRepository.addManualEntry({
+        date,
+        doctor_id: doctor.id,
+        timing,
+        branch_id: assignment.branch_id,
+        location_id: assignment.location_id
+      });
     }
-
-    await rosterRepository.addManualEntry({
-      date,
-      doctor_id: doctor.id,
-      timing,
-      branch_id: assignment.branch_id,
-      location_id: assignment.location_id
-    });
 
     notifyUpdate();
     return res.status(201).json({ message: 'Manual roster entry added successfully.' });

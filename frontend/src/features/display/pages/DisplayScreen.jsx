@@ -157,7 +157,7 @@ const DisplayScreen = () => {
         {currentPage?.isVideo && (
           <div className="flex-1 flex items-center justify-center overflow-hidden bg-black h-full w-full">
             <video
-              src={`http://${window.location.hostname}:5000${currentPage.videoUrl}`}
+              src={`${import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : window.location.origin}${currentPage.videoUrl}`}
               className="w-full h-full object-contain"
               autoPlay
               muted

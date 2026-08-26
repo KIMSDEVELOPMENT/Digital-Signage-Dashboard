@@ -6,7 +6,7 @@ export class DoctorRepository {
   _getSelectQuery() {
     return `
       SELECT doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at,
-      JSON_ARRAYAGG(
+      CONCAT('[', GROUP_CONCAT(
         JSON_OBJECT(
           'id', da.id,
           'branch_id', da.branch_id,
@@ -18,7 +18,7 @@ export class DoctorRepository {
           'display_days', ds.display_days,
           'shift_time', da.shift_time
         )
-      ) AS assignments
+      ), ']') AS assignments
       FROM doctors doc
       JOIN doctor_assignments da ON doc.id = da.doctor_id
         JOIN branches b ON da.branch_id = b.id AND b.status = 1
@@ -37,7 +37,7 @@ export class DoctorRepository {
   _getSelectQueryWithDeptStatus() {
     return `
       SELECT doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at,
-      JSON_ARRAYAGG(
+      CONCAT('[', GROUP_CONCAT(
         JSON_OBJECT(
           'id', da.id,
           'branch_id', da.branch_id,
@@ -50,7 +50,7 @@ export class DoctorRepository {
           'display_days', ds.display_days,
           'shift_time', da.shift_time
         )
-      ) AS assignments
+      ), ']') AS assignments
       FROM doctors doc
       JOIN doctor_assignments da ON doc.id = da.doctor_id
         JOIN branches b ON da.branch_id = b.id AND b.status = 1
@@ -100,7 +100,7 @@ export class DoctorRepository {
       params.push(`${search}%`, `% ${search}%`, `%${search}%`, `${search}%`, `% ${search}%`);
     }
 
-    query += ' GROUP BY doc.id ORDER BY doc.name ASC';
+    query += ' GROUP BY doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at ORDER BY doc.name ASC';
     const [rows] = await pool.query(query, params);
     return rows.map((r) => new Doctor(r));
   }
@@ -198,7 +198,7 @@ export class DoctorRepository {
     const dataQuery = `
       ${this._getSelectQuery()}
       ${whereClause}
-      GROUP BY doc.id
+      GROUP BY doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at
       ORDER BY ${sortColumn} ${order}
       LIMIT ? OFFSET ?
     `;
@@ -214,13 +214,13 @@ export class DoctorRepository {
 
   async findByEmployeeId(employeeId) {
     const pool = getPool();
-    const [rows] = await pool.query(this._getSelectQuery() + ' WHERE doc.employee_id = ? GROUP BY doc.id', [employeeId]);
+    const [rows] = await pool.query(this._getSelectQuery() + ' WHERE doc.employee_id = ? GROUP BY doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at', [employeeId]);
     return rows.length > 0 ? new Doctor(rows[0]) : null;
   }
 
   async findById(id) {
     const pool = getPool();
-    const [rows] = await pool.query(this._getSelectQuery() + ' WHERE doc.id = ? GROUP BY doc.id', [id]);
+    const [rows] = await pool.query(this._getSelectQuery() + ' WHERE doc.id = ? GROUP BY doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at', [id]);
     return rows.length > 0 ? new Doctor(rows[0]) : null;
   }
 
@@ -338,7 +338,7 @@ export class DoctorRepository {
     const dataQuery = `
       ${this._getSelectQueryWithDeptStatus()}
       ${whereClause}
-      GROUP BY doc.id
+      GROUP BY doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at
       ORDER BY doc.name ASC
       LIMIT ? OFFSET ?
     `;
@@ -356,7 +356,7 @@ export class DoctorRepository {
     const [rows] = await pool.query(
       this._getSelectQuery() + `
        WHERE LOWER(doc.name) = LOWER(?) AND da.branch_id = ? AND da.department_id = ?
-       GROUP BY doc.id
+       GROUP BY doc.id, doc.employee_id, doc.name, doc.designation, doc.photo_url, doc.status, doc.created_at, doc.updated_at
       `,
       [name, branchId, departmentId]
     );

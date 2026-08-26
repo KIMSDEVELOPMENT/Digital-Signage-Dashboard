@@ -428,7 +428,8 @@ const Doctor = () => {
 
   const getFullPhotoUrl = (url) => {
     if (!url) return '';
-    return `http://${window.location.hostname}:5000${url}`;
+    const baseMediaUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : window.location.origin;
+    return `${baseMediaUrl}${url}`;
   };
 
   const getSortIcon = (column) => {
@@ -510,7 +511,7 @@ const Doctor = () => {
           {user?.role === 'super_admin' && (
             <div className="flex items-center gap-2 mr-2">
               <a
-                href="http://localhost:5000/api/doctors/template"
+                href={`${import.meta.env.VITE_API_URL || window.location.origin + '/api'}/doctors/template`}
                 download
                 className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-sm transition-all border border-slate-700 cursor-pointer text-center"
               >

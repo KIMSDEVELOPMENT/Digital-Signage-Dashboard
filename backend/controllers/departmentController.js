@@ -65,6 +65,10 @@ export async function getDepartments(req, res) {
 }
 
 export async function createDepartment(req, res) {
+  if (req.user && req.user.role !== 'super_admin') {
+    return res.status(403).json({ message: 'Only super admin can add departments.' });
+  }
+
   let { name, branch_id, location_id, status } = req.body;
 
   if (!name || !name.trim()) {
@@ -183,6 +187,10 @@ export async function updateDepartment(req, res) {
 }
 
 export async function deleteDepartment(req, res) {
+  if (req.user && req.user.role !== 'super_admin') {
+    return res.status(403).json({ message: 'Only super admin can delete departments.' });
+  }
+
   const { id } = req.params;
 
   try {

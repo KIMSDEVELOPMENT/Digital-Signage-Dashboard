@@ -67,7 +67,7 @@ export async function getDoctors(req, res) {
     });
   } catch (error) {
     console.error('Get doctors error:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+    return res.status(500).json({ message: 'Internal server error.', error: error.message, stack: error.stack });
   }
 }
 

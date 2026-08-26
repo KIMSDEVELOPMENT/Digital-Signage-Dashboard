@@ -237,7 +237,7 @@ export class DepartmentRepository {
 
   async hasDoctors(departmentId) {
     const pool = getPool();
-    const [rows] = await pool.query('SELECT id FROM doctors WHERE department_id = ? LIMIT 1', [departmentId]);
+    const [rows] = await pool.query('SELECT id FROM doctor_assignments WHERE department_id = ? LIMIT 1', [departmentId]);
     return rows.length > 0;
   }
 }

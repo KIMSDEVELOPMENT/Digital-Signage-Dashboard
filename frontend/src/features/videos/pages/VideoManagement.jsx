@@ -145,7 +145,8 @@ const VideoManagement = () => {
 
   const getFullVideoUrl = (url) => {
     if (!url) return '';
-    return `http://localhost:5000${url}`;
+    const baseMediaUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : window.location.origin;
+    return `${baseMediaUrl}${url}`;
   };
 
   const isSuperAdmin = user?.role === 'super_admin';

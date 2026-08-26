@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { getBranchConfig } from '../config/branchRegistry';
 
-const SSE_URL = `http://${window.location.hostname}:5000/api/display/stream`;
+const SSE_URL = import.meta.env.VITE_API_URL 
+  ? `${import.meta.env.VITE_API_URL}/display/stream` 
+  : `${window.location.origin}/api/display/stream`;
 
 /**
  * useDisplayPlaylist
@@ -34,7 +36,7 @@ export const useDisplayPlaylist = (branch, location) => {
         setError(null);
       } catch (err) {
         console.error('Error fetching display playlist:', err);
-        setError('Unable to load display configuration.');
+        setError(`Unable to load display configuration. Error: ${err.message || 'Unknown Network Error'}`);
       } finally {
         setLoading(false);
       }

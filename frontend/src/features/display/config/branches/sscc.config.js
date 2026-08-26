@@ -52,8 +52,8 @@ export const ssccConfig = {
    */
   async buildPages(branch, location) {
     const [resKss, resKcc] = await Promise.all([
-      api.get('/display/sscc/kss').catch(() => ({ data: null })),
-      api.get('/display/sscc/kcc').catch(() => ({ data: null })),
+      api.get('/display/sscc/kss'),
+      api.get('/display/sscc/kcc'),
     ]);
 
     const kssPlaylist = resKss.data || { branch: 'SSCC', steps: [] };
@@ -121,14 +121,15 @@ export const ssccConfig = {
 
     // Phase 4: Interleave combined + location pages with videos
     const allPages = [];
-    if (allBranchVideos.length === 0) {
-      // No videos — just run both views once
-      if (combinedPages.length > 0) allPages.push(...combinedPages);
-      else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
-      allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+    const hasAnyDoctors = combinedPages.length > 0 || locationPages.length > 0;
 
+    if (allBranchVideos.length === 0) {
+      if (combinedPages.length > 0) allPages.push(...combinedPages);
       if (locationPages.length > 0) allPages.push(...locationPages);
-      else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
+
+      if (!hasAnyDoctors) {
+        allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
+      }
       allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
     } else {
       // Pair videos and interleave with page slots
@@ -137,16 +138,23 @@ export const ssccConfig = {
         const v2 = allBranchVideos[i + 1];
 
         // Slot 1: Combined + video
-        if (combinedPages.length > 0) allPages.push(...combinedPages);
-        else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
-        allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+        if (combinedPages.length > 0) {
+          allPages.push(...combinedPages);
+          allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+        }
         if (v1) allPages.push({ isVideo: true, duration: v1.duration, videoUrl: v1.url });
 
         // Slot 2: Location-specific + video
-        if (locationPages.length > 0) allPages.push(...locationPages);
-        else allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
-        allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+        if (locationPages.length > 0) {
+          allPages.push(...locationPages);
+          allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+        }
         if (v2) allPages.push({ isVideo: true, duration: v2.duration, videoUrl: v2.url });
+      }
+
+      if (!hasAnyDoctors) {
+        allPages.unshift({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
+        allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
       }
     }
 

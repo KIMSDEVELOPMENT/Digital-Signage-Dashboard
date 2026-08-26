@@ -120,7 +120,7 @@ const Department = () => {
 
   // SSE: real-time sync — when super-admin changes dept status, re-fetch silently
   useEffect(() => {
-    const baseUrl = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api`;
+    const baseUrl = import.meta.env.VITE_API_URL || `${window.location.origin}/api`;
     const connect = () => {
       if (sseRef.current) sseRef.current.close();
       const es = new EventSource(`${baseUrl}/display/stream`);
@@ -259,9 +259,10 @@ const Department = () => {
     }
   };
 
-  const canCreate = hasPermission('Department', 'create');
+  // Only super_admin can create and delete departments
+  const canCreate = user?.role === 'super_admin';
+  const canDelete = user?.role === 'super_admin';
   const canUpdate = hasPermission('Department', 'update');
-  const canDelete = hasPermission('Department', 'delete');
 
   const getSortIcon = (column) => {
     if (sortBy !== column) return '';
@@ -509,6 +510,15 @@ const Department = () => {
                                 title="Edit Department"
                               >
                                 <Edit2 className="w-4 h-4" />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={() => handleDeleteDepartment(dept.id, dept.name)}
+                                className="p-2 rounded-lg border border-slate-800 bg-slate-900/40 text-slate-400 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/30 transition-all cursor-pointer"
+                                title="Delete Department"
+                              >
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             )}
                           </td>
