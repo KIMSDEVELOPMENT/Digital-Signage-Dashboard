@@ -126,6 +126,51 @@ async function ensureVideosSchema() {
   }
 }
 
+async function ensureDefaultDisplayPlaylists() {
+  const connection = await pool.getConnection();
+  try {
+    const [locs] = await connection.query(
+      `SELECT l.id AS location_id, l.branch_id, b.name AS branch_name, l.name AS location_name
+       FROM locations l
+       JOIN branches b ON l.branch_id = b.id
+       WHERE b.status = 1 AND l.status = 1`
+    );
+
+    for (const loc of locs) {
+      const [pls] = await connection.query(
+        'SELECT id FROM display_playlists WHERE screen_branch_id = ? AND screen_location_id = ?',
+        [loc.branch_id, loc.location_id]
+      );
+
+      if (pls.length === 0) {
+        console.log(`🔧 Auto-seeding default display playlist for ${loc.branch_name} / ${loc.location_name}...`);
+        const [resPl] = await connection.query(
+          'INSERT INTO display_playlists (screen_branch_id, screen_location_id) VALUES (?, ?)',
+          [loc.branch_id, loc.location_id]
+        );
+        const playlistId = resPl.insertId;
+
+        const [resStep] = await connection.query(
+          'INSERT INTO display_playlist_steps (playlist_id, step_order, title, duration_seconds) VALUES (?, 1, "All Departments", 10)',
+          [playlistId]
+        );
+        const stepId = resStep.insertId;
+
+        await connection.query(
+          'INSERT INTO display_playlist_step_locations (step_id, location_id) VALUES (?, ?)',
+          [stepId, loc.location_id]
+        );
+
+        console.log(`✅ Default display playlist created for ${loc.branch_name} / ${loc.location_name}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error ensuring default display playlists:', error);
+  } finally {
+    connection.release();
+  }
+}
+
 /**
  * Initialize the connection pool targeting the application database.
  * Must be called after migrations have completed.
@@ -152,6 +197,7 @@ export async function initializePool() {
   await ensureDoctorSittingsSchema();
   await ensureDoctorAssignmentsSchema();
   await ensureVideosSchema();
+  await ensureDefaultDisplayPlaylists();
 
   return pool;
 }
