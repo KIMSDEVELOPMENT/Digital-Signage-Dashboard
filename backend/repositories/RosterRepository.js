@@ -46,22 +46,11 @@ export class RosterRepository {
     return this.findRosterByDate({ branch, location, date: today, userId });
   }
 
-  async addManualEntry({ date, doctor_id, timing, branch_id, location_id, department_id = null }) {
+  async addManualEntry({ date, doctor_id, timing, branch_id, location_id }) {
     const pool = getPool();
-    let deptId = department_id;
-    if (!deptId) {
-      const [rows] = await pool.query(
-        'SELECT department_id FROM doctor_assignments WHERE doctor_id = ? AND branch_id = ? AND location_id = ? LIMIT 1',
-        [doctor_id, branch_id, location_id]
-      );
-      if (rows.length > 0) {
-        deptId = rows[0].department_id;
-      }
-    }
-
     const [res] = await pool.query(
-      'INSERT INTO roster (date, doctor_id, timing, branch_id, location_id, department_id) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE timing = ?',
-      [date, doctor_id, timing, branch_id, location_id, deptId, timing]
+      'INSERT INTO roster (date, doctor_id, timing, branch_id, location_id) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE timing = ?',
+      [date, doctor_id, timing, branch_id, location_id, timing]
     );
     return res.insertId;
   }

@@ -598,14 +598,24 @@ export async function addManualRoster(req, res) {
       }
     }
 
+    // Deduplicate by branch_id and location_id
+    const uniqueAssignments = [];
+    const seen = new Set();
     for (const assignment of targetAssignments) {
+      const key = `${assignment.branch_id}_${assignment.location_id}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueAssignments.push(assignment);
+      }
+    }
+
+    for (const assignment of uniqueAssignments) {
       await rosterRepository.addManualEntry({
         date,
         doctor_id: doctor.id,
         timing,
         branch_id: assignment.branch_id,
-        location_id: assignment.location_id,
-        department_id: assignment.department_id
+        location_id: assignment.location_id
       });
     }
 

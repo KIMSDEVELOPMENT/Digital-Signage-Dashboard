@@ -202,7 +202,7 @@ const Roster = () => {
         date: selectedDate,
         doctor_id: selectedDoctor.id,
         timing: manualTiming,
-        branch: selectedBranch,
+        branch: searchBranch || selectedBranch,
         location: selectedLocation
       });
       toast.success('Manual entry added successfully!', { id: loadToast });
