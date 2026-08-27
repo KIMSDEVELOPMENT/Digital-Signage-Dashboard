@@ -76,6 +76,56 @@ async function ensureDoctorSittingsSchema() {
   }
 }
 
+async function ensureDoctorAssignmentsSchema() {
+  const connection = await pool.getConnection();
+  try {
+    const [columnRows] = await connection.query(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'doctor_assignments'
+         AND COLUMN_NAME = 'shift_time'`
+    );
+
+    if (columnRows.length === 0) {
+      console.log('🔧 Adding missing shift_time column to doctor_assignments table...');
+      await connection.query(
+        `ALTER TABLE doctor_assignments ADD COLUMN shift_time VARCHAR(100) DEFAULT NULL AFTER department_id`
+      );
+      console.log('✅ Added shift_time column to doctor_assignments table successfully.');
+    }
+  } catch (error) {
+    console.error('Error ensuring doctor_assignments schema:', error);
+  } finally {
+    connection.release();
+  }
+}
+
+async function ensureVideosSchema() {
+  const connection = await pool.getConnection();
+  try {
+    const [columnRows] = await connection.query(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'videos'
+         AND COLUMN_NAME = 'play_order'`
+    );
+
+    if (columnRows.length === 0) {
+      console.log('🔧 Adding missing play_order column to videos table...');
+      await connection.query(
+        `ALTER TABLE videos ADD COLUMN play_order INT DEFAULT 1 AFTER uploaded_by`
+      );
+      console.log('✅ Added play_order column to videos table successfully.');
+    }
+  } catch (error) {
+    console.error('Error ensuring videos schema:', error);
+  } finally {
+    connection.release();
+  }
+}
+
 /**
  * Initialize the connection pool targeting the application database.
  * Must be called after migrations have completed.
@@ -100,6 +150,8 @@ export async function initializePool() {
   connection.release();
 
   await ensureDoctorSittingsSchema();
+  await ensureDoctorAssignmentsSchema();
+  await ensureVideosSchema();
 
   return pool;
 }

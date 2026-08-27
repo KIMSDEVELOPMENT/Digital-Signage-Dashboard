@@ -604,7 +604,8 @@ export async function addManualRoster(req, res) {
         doctor_id: doctor.id,
         timing,
         branch_id: assignment.branch_id,
-        location_id: assignment.location_id
+        location_id: assignment.location_id,
+        department_id: assignment.department_id
       });
     }
 
