@@ -125,8 +125,11 @@ const Roster = () => {
     
     try {
       setLoadingRoster(true);
+      // For normal_admin: don't filter by location — show all scheduled doctors for the branch.
+      // super_admin may optionally filter by a specific block they select.
+      const locationParam = (user.role === 'super_admin' && selectedLocation) ? selectedLocation : undefined;
       const res = await api.get(`/roster/date`, {
-        params: { branch: selectedBranch, location: selectedLocation, date: selectedDate }
+        params: { branch: selectedBranch, location: locationParam, date: selectedDate }
       });
       setTodayRoster(res.data);
       setCurrentPage(1); // Reset page on fetch

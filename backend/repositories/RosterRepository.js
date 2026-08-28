@@ -30,11 +30,11 @@ export class RosterRepository {
     if (location) {
       query += ' AND l.name = ?';
       params.push(location);
-    } else if (userId) {
-      // If no specific location requested, but we have a userId, restrict to their assigned locations
-      query += ' AND r.location_id IN (SELECT location_id FROM user_locations WHERE user_id = ?)';
-      params.push(userId);
     }
+    // NOTE: We intentionally do NOT add a user_locations subquery here.
+    // Branch-level access is already verified in the controller before reaching this method.
+    // A per-location filter on the read path caused all roster entries to be silently hidden
+    // when the roster's location_id didn't exactly match the user's user_locations entry.
 
     query += ' ORDER BY d.name ASC';
     const [rows] = await pool.query(query, params);
