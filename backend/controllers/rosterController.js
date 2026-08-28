@@ -1,11 +1,16 @@
 import xlsx from 'xlsx';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import doctorRepository from '../repositories/DoctorRepository.js';
 import rosterRepository from '../repositories/RosterRepository.js';
 import userRepository from '../repositories/UserRepository.js';
 import departmentRepository from '../repositories/DepartmentRepository.js';
 import { getPool } from '../config/db.js';
 import { notifyUpdate } from '../utils/sse.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Helper to get local date string YYYY-MM-DD
 function getTodayDateString(d = new Date()) {
@@ -471,33 +476,48 @@ export async function importRoster(req, res) {
     }
 
     await rosterRepository.importRoster(validEntries);
-    
-    // Save file to archive if present
-    if (req.file && validEntries.length > 0) {
-      const branchId = validEntries[0].branch_id;
-      const originalName = req.file.originalname;
-      
-      const uploadDir = 'uploads/rosters';
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
+
+    // Save file to archive — isolated try/catch so a failure here never
+    // rolls back or masks the successful roster import above.
+    try {
+      if (req.file && validEntries.length > 0) {
+        const branchId = validEntries[0].branch_id;
+        const originalName = req.file.originalname;
+
+        // Use an absolute path so this works correctly regardless of
+        // the process working directory (e.g. when run via PM2 on the live server).
+        const uploadDir = path.resolve(__dirname, '../../uploads/rosters');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const newFileName = `${Date.now()}-${Math.round(Math.random() * 1E9)}-${originalName}`;
+        const newFilePath = path.join(uploadDir, newFileName);
+
+        fs.renameSync(req.file.path, newFilePath);
+
+        // Store a relative path in the DB so it stays portable across deployments.
+        const storedRelPath = path.join('uploads', 'rosters', newFileName).replace(/\\/g, '/');
+
+        const pool = getPool();
+        await pool.query(
+          'INSERT INTO roster_archives (original_filename, stored_filepath, branch_id, uploaded_by) VALUES (?, ?, ?, ?)',
+          [originalName, storedRelPath, branchId, req.user ? req.user.id : null]
+        );
+      } else if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
       }
-      
-      const newFileName = `${Date.now()}-${Math.round(Math.random() * 1E9)}-${originalName}`;
-      const newFilePath = `${uploadDir}/${newFileName}`;
-      
-      fs.renameSync(req.file.path, newFilePath);
-      
-      const pool = getPool();
-      await pool.query(
-        'INSERT INTO roster_archives (original_filename, stored_filepath, branch_id, uploaded_by) VALUES (?, ?, ?, ?)',
-        [originalName, newFilePath, branchId, req.user ? req.user.id : null]
-      );
-    } else if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    } catch (archiveError) {
+      // Log the archive failure but do NOT return a 500 — the roster was saved successfully.
+      console.error('Roster archive step failed (roster data was still saved):', archiveError);
+      // Clean up temp file if it still exists
+      if (req.file && fs.existsSync(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+      }
     }
 
     notifyUpdate();
-    return res.status(200).json({ message: "Roster imported successfully." });
+    return res.status(200).json({ message: 'Roster imported successfully.' });
   } catch (error) {
     console.error('Import roster error:', error);
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -770,11 +790,16 @@ export async function downloadArchivedFile(req, res) {
       }
     }
 
-    if (!fs.existsSync(fileRecord.stored_filepath)) {
+    // Resolve to absolute path — stored_filepath may be relative (e.g. uploads/rosters/file.xlsx)
+    const absolutePath = path.isAbsolute(fileRecord.stored_filepath)
+      ? fileRecord.stored_filepath
+      : path.resolve(__dirname, '../../', fileRecord.stored_filepath);
+
+    if (!fs.existsSync(absolutePath)) {
       return res.status(404).json({ message: 'Physical file not found on server.' });
     }
 
-    res.download(fileRecord.stored_filepath, fileRecord.original_filename);
+    res.download(absolutePath, fileRecord.original_filename);
   } catch (error) {
     console.error('Download archived file error:', error);
     return res.status(500).json({ message: 'Internal server error.' });
@@ -803,9 +828,14 @@ export async function deleteArchivedFile(req, res) {
       }
     }
 
+    // Resolve to absolute path — stored_filepath may be relative (e.g. uploads/rosters/file.xlsx)
+    const absolutePath = path.isAbsolute(fileRecord.stored_filepath)
+      ? fileRecord.stored_filepath
+      : path.resolve(__dirname, '../../', fileRecord.stored_filepath);
+
     // Delete physical file
-    if (fs.existsSync(fileRecord.stored_filepath)) {
-      fs.unlinkSync(fileRecord.stored_filepath);
+    if (fs.existsSync(absolutePath)) {
+      fs.unlinkSync(absolutePath);
     }
     
     // Delete database record
