@@ -11,14 +11,27 @@ export function sseStream(req, res) {
 
   clients.push(res);
 
+  // Keep-alive heartbeat comment every 25s
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': keepalive\n\n');
+    } catch (e) {
+      clearInterval(heartbeat);
+    }
+  }, 25000);
+
   req.on('close', () => {
+    clearInterval(heartbeat);
     clients = clients.filter((client) => client !== res);
   });
 }
 
 export function notifyUpdate() {
   clients.forEach((client) => {
-    // We can send any data payload here, but a simple string event is enough to trigger a refetch
-    client.write('data: "update"\n\n');
+    try {
+      client.write('data: "update"\n\n');
+    } catch (err) {
+      // client dropped
+    }
   });
 }

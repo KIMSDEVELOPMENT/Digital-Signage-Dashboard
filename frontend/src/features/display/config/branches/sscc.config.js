@@ -105,56 +105,67 @@ export const ssccConfig = {
       ];
     }
 
-    // Phase 3: Aggregate videos for the current location
-    let allBranchVideos = [];
-    if (locParam === 'kss') {
-      allBranchVideos = [...(kssPlaylist.videos || [])];
-    } else if (locParam === 'kcc') {
-      allBranchVideos = [...(kccPlaylist.videos || [])];
-    } else {
-      allBranchVideos = [
-        ...(kssPlaylist.videos || []),
-        ...(kccPlaylist.videos || []),
-      ];
-    }
-    allBranchVideos.sort((a, b) => a.playOrder - b.playOrder);
+    // Phase 3: Aggregate videos for SSCC (across both KSS and KCC)
+    const videoMap = new Map();
+    const rawVideos = [
+      ...(kssPlaylist.videos || []),
+      ...(kccPlaylist.videos || []),
+    ];
+    rawVideos.forEach(v => {
+      if (v?.url && !videoMap.has(v.url)) {
+        videoMap.set(v.url, v);
+      }
+    });
+    const allBranchVideos = Array.from(videoMap.values()).sort(
+      (a, b) => (Number(a.playOrder) || 1) - (Number(b.playOrder) || 1)
+    );
 
-    // Phase 4: Interleave combined + location pages with videos
+    // Phase 4: Interleave combined + location pages with banners and videos
+    // Sequence required:
+    // SSCC All Doctors -> Banner 1 -> Video 1 -> Particular KSS/KCC Doctors -> Banner 2 -> Video 2 -> Loop starts from SSCC
     const allPages = [];
     const hasAnyDoctors = combinedPages.length > 0 || locationPages.length > 0;
 
-    if (allBranchVideos.length === 0) {
-      if (combinedPages.length > 0) allPages.push(...combinedPages);
-      if (locationPages.length > 0) allPages.push(...locationPages);
+    const banner1 = { isBanner: true, duration: 10, bannerNumber: 1, bannerType: 'general' };
+    const banner2 = { isBanner: true, duration: 10, bannerNumber: 2, bannerType: 'tariff' };
 
-      if (!hasAnyDoctors) {
+    if (allBranchVideos.length === 0) {
+      if (combinedPages.length > 0) {
+        allPages.push(...combinedPages);
+      } else if (!hasAnyDoctors) {
         allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
       }
-      allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+      allPages.push(banner1);
+
+      if (locationPages.length > 0) {
+        allPages.push(...locationPages);
+      }
+      allPages.push(banner2);
     } else {
-      // Pair videos and interleave with page slots
+      // Pair videos in steps of 2 to maintain the alternating slot rhythm
       for (let i = 0; i < allBranchVideos.length; i += 2) {
         const v1 = allBranchVideos[i];
         const v2 = allBranchVideos[i + 1];
 
-        // Slot 1: Combined + video
+        // Slot 1: SSCC All Doctors -> Banner 1 -> Video 1
         if (combinedPages.length > 0) {
           allPages.push(...combinedPages);
-          allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+        } else if (!hasAnyDoctors && i === 0) {
+          allPages.push({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
         }
-        if (v1) allPages.push({ isVideo: true, duration: v1.duration, videoUrl: v1.url });
+        allPages.push(banner1);
+        if (v1) {
+          allPages.push({ isVideo: true, duration: v1.duration, videoUrl: v1.url });
+        }
 
-        // Slot 2: Location-specific + video
+        // Slot 2: Particular KSS/KCC Doctors -> Banner 2 -> Video 2
         if (locationPages.length > 0) {
           allPages.push(...locationPages);
-          allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
         }
-        if (v2) allPages.push({ isVideo: true, duration: v2.duration, videoUrl: v2.url });
-      }
-
-      if (!hasAnyDoctors) {
-        allPages.unshift({ stepTitle: 'No schedules', duration: 10, department: null, doctors: [] });
-        allPages.push({ isBanner: true, duration: 10, bannerType: 'general' });
+        allPages.push(banner2);
+        if (v2) {
+          allPages.push({ isVideo: true, duration: v2.duration, videoUrl: v2.url });
+        }
       }
     }
 

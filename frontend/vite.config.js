@@ -12,6 +12,19 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            if (err.code === 'ECONNRESET' || err.code === 'EPIPE') {
+              // Harmless client disconnect on long-lived SSE /api/display/stream
+              return;
+            }
+            console.error('[vite proxy error]', err);
+          });
+        },
+      },
+      '/uploads': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
       },
     },
   },

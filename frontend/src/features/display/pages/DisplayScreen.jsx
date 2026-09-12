@@ -10,6 +10,7 @@ import DisplayFooter from '../components/DisplayFooter';
 import DepartmentHeader from '../components/DepartmentHeader';
 import DoctorCard from '../components/DoctorCard';
 import bannerImg from '../../../common/assets/Banner.png';
+import banner2Img from '../../../common/assets/Banner2.png';
 import bgImg from '../../../common/assets/bg.png';
 
 const formatLocationForUrl = (loc) => {
@@ -157,13 +158,26 @@ const DisplayScreen = () => {
         {currentPage?.isVideo && (
           <div className="flex-1 flex items-center justify-center overflow-hidden bg-black h-full w-full">
             <video
+              ref={(el) => {
+                if (el) {
+                  el.defaultMuted = true;
+                  el.muted = true;
+                  el.play().catch((err) => {
+                    console.warn('[DisplayScreen] Autoplay deferred:', err);
+                  });
+                }
+              }}
               src={`${import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : window.location.origin}${currentPage.videoUrl}`}
               className="w-full h-full object-contain"
               autoPlay
               muted
+              playsInline
               preload="auto"
               onEnded={goToNext}
-              onError={goToNext}
+              onError={(e) => {
+                console.error('[DisplayScreen] Video playback error for URL:', currentPage.videoUrl, e);
+                goToNext();
+              }}
             />
           </div>
         )}
@@ -172,14 +186,18 @@ const DisplayScreen = () => {
         {currentPage?.isBanner && (
           <AnimatePresence mode="wait">
             <motion.div
-              key="banner-page"
+              key={`banner-page-${currentPageIndex}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.8 }}
-              className="flex-1 flex items-center justify-center overflow-hidden min-h-0"
+              className="flex-1 flex items-center justify-center overflow-hidden min-h-0 w-full h-full"
             >
-              <img src={bannerImg} alt="KIMS Banner" className="w-full h-full object-fill" />
+              <img
+                src={currentPage.bannerNumber === 2 || currentPage.bannerType === 'tariff' ? banner2Img : bannerImg}
+                alt={currentPage.bannerNumber === 2 || currentPage.bannerType === 'tariff' ? "Service Tariff List" : "KIMS Banner"}
+                className="w-full h-full object-fill"
+              />
             </motion.div>
           </AnimatePresence>
         )}
