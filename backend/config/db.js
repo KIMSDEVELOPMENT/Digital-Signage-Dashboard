@@ -50,7 +50,7 @@ async function ensureDoctorSittingsSchema() {
         CONSTRAINT doctor_sittings_new_ibfk_1 FOREIGN KEY (employee_id) REFERENCES doctors (employee_id) ON DELETE CASCADE,
         CONSTRAINT doctor_sittings_new_ibfk_2 FOREIGN KEY (branch_id) REFERENCES branches (id) ON DELETE CASCADE,
         CONSTRAINT doctor_sittings_new_ibfk_3 FOREIGN KEY (location_id) REFERENCES locations (id) ON DELETE CASCADE
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
     const [existingTableRows] = await connection.query(
@@ -131,7 +131,7 @@ async function ensureDepartmentDesignationsSchema() {
         PRIMARY KEY (id),
         KEY department_id (department_id),
         CONSTRAINT fk_dd_department FOREIGN KEY (department_id) REFERENCES departments (id) ON DELETE CASCADE
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
   } catch (error) {
     console.error('Error ensuring department_designations schema:', error);

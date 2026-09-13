@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS department_designations (
   PRIMARY KEY (id),
   KEY department_id (department_id),
   CONSTRAINT fk_dd_department FOREIGN KEY (department_id) REFERENCES departments (id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 3. Align doctor_assignments where department_id points to a department with matching branch, location, and name
 UPDATE doctor_assignments da
