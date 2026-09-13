@@ -94,8 +94,47 @@ async function ensureDoctorAssignmentsSchema() {
       );
       console.log('✅ Added shift_time column to doctor_assignments table successfully.');
     }
+
+    const [dispColRows] = await connection.query(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'doctor_assignments'
+         AND COLUMN_NAME = 'display_order'`
+    );
+
+    if (dispColRows.length === 0) {
+      console.log('🔧 Adding missing display_order column to doctor_assignments table...');
+      await connection.query(
+        `ALTER TABLE doctor_assignments ADD COLUMN display_order INT DEFAULT 0 AFTER shift_time`
+      );
+      console.log('✅ Added display_order column to doctor_assignments table successfully.');
+    }
   } catch (error) {
     console.error('Error ensuring doctor_assignments schema:', error);
+  } finally {
+    connection.release();
+  }
+}
+
+async function ensureDepartmentDesignationsSchema() {
+  const connection = await pool.getConnection();
+  try {
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS department_designations (
+        id INT NOT NULL AUTO_INCREMENT,
+        department_id INT NOT NULL,
+        designation VARCHAR(150) NOT NULL,
+        sort_order INT NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY department_id (department_id),
+        CONSTRAINT fk_dd_department FOREIGN KEY (department_id) REFERENCES departments (id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+    `);
+  } catch (error) {
+    console.error('Error ensuring department_designations schema:', error);
   } finally {
     connection.release();
   }
@@ -196,6 +235,7 @@ export async function initializePool() {
 
   await ensureDoctorSittingsSchema();
   await ensureDoctorAssignmentsSchema();
+  await ensureDepartmentDesignationsSchema();
   await ensureVideosSchema();
   await ensureDefaultDisplayPlaylists();
 

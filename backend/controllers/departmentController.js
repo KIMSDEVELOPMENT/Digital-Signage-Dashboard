@@ -281,22 +281,43 @@ export async function getDoctorsOrder(req, res) {
     const targetDept = deptRows[0];
     const aliases = getDeptAliases(targetDept.name);
 
-    const [rows] = await pool.query(
-      `SELECT DISTINCT d.id AS doctor_id, d.name, d.designation, da.display_order, COALESCE(dd.sort_order, 99) AS desig_sort_order
-       FROM doctor_assignments da
-       JOIN doctors d ON da.doctor_id = d.id AND d.status = 1
-       LEFT JOIN departments dept ON da.department_id = dept.id
-       LEFT JOIN department_designations dd ON dd.department_id = ?
-            AND UPPER(dd.designation) = UPPER(d.designation)
-       WHERE da.department_id = ?
-          OR (da.branch_id = ? AND TRIM(UPPER(dept.name)) IN (?))
-       ORDER BY desig_sort_order ASC, da.display_order ASC, d.name ASC`,
-      [id, id, targetDept.branch_id, aliases]
-    );
-    return res.status(200).json(rows);
+    try {
+      const [rows] = await pool.query(
+        `SELECT d.id AS doctor_id, d.name, d.designation, 
+                MIN(COALESCE(da.display_order, 0)) AS display_order, 
+                MIN(COALESCE(dd.sort_order, 99)) AS desig_sort_order
+         FROM doctor_assignments da
+         JOIN doctors d ON da.doctor_id = d.id AND d.status = 1
+         LEFT JOIN departments dept ON da.department_id = dept.id
+         LEFT JOIN department_designations dd ON dd.department_id = ?
+              AND UPPER(dd.designation) = UPPER(d.designation)
+         WHERE da.department_id = ?
+            OR (da.branch_id = ? AND TRIM(UPPER(dept.name)) IN (?))
+         GROUP BY d.id, d.name, d.designation
+         ORDER BY desig_sort_order ASC, display_order ASC, d.name ASC`,
+        [id, id, targetDept.branch_id, aliases]
+      );
+      return res.status(200).json(rows);
+    } catch (innerError) {
+      console.warn('Full doctor order query failed, using safe fallback:', innerError.message);
+      const [fallbackRows] = await pool.query(
+        `SELECT d.id AS doctor_id, d.name, d.designation, 
+                0 AS display_order, 
+                99 AS desig_sort_order
+         FROM doctor_assignments da
+         JOIN doctors d ON da.doctor_id = d.id AND d.status = 1
+         LEFT JOIN departments dept ON da.department_id = dept.id
+         WHERE da.department_id = ?
+            OR (da.branch_id = ? AND TRIM(UPPER(dept.name)) IN (?))
+         GROUP BY d.id, d.name, d.designation
+         ORDER BY d.name ASC`,
+        [id, targetDept.branch_id, aliases]
+      );
+      return res.status(200).json(fallbackRows);
+    }
   } catch (error) {
-    console.error('Get doctors order error:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+    console.error('Get doctors order error for dept ' + id + ':', error);
+    return res.status(500).json({ message: error.message || 'Internal server error.' });
   }
 }
 
@@ -311,6 +332,19 @@ export async function updateDoctorsOrder(req, res) {
     );
     const targetDept = deptRows[0] || null;
     const aliases = targetDept ? getDeptAliases(targetDept.name) : [];
+
+    // Ensure display_order column exists
+    try {
+      const [dispCol] = await pool.query(
+        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'doctor_assignments' AND COLUMN_NAME = 'display_order'`
+      );
+      if (dispCol.length === 0) {
+        await pool.query('ALTER TABLE doctor_assignments ADD COLUMN display_order INT DEFAULT 0 AFTER shift_time');
+      }
+    } catch (colErr) {
+      console.warn('Could not verify/add display_order column:', colErr.message);
+    }
 
     if (orders && orders.length > 0) {
       for (const item of orders) {
@@ -335,6 +369,6 @@ export async function updateDoctorsOrder(req, res) {
     return res.status(200).json({ message: 'Doctor display order updated successfully.' });
   } catch (error) {
     console.error('Update doctors order error:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+    return res.status(500).json({ message: error.message || 'Internal server error.' });
   }
 }
