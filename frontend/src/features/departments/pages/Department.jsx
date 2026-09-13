@@ -422,7 +422,7 @@ const Department = () => {
           </div>
 
           {loading ? (
-            <TableSkeleton rows={5} cols={5} />
+            <TableSkeleton rows={5} cols={6} />
           ) : (
             <div className="glass-panel rounded-2xl border border-slate-800/40 overflow-hidden">
               <div className="overflow-x-auto">
@@ -446,6 +446,9 @@ const Department = () => {
                         onClick={() => handleSort('location_name')}
                       >
                         Location{getSortIcon('location_name')}
+                      </th>
+                      <th className="px-6 py-4 select-none">
+                        Doctors Assigned
                       </th>
                       <th
                         className="px-6 py-4 cursor-pointer hover:text-slate-200 transition-colors select-none"
@@ -490,6 +493,18 @@ const Department = () => {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-slate-400">{dept.location_name}</td>
+                          <td className="px-6 py-4">
+                            {Number(dept.assigned_doctors_count) > 0 ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                {dept.assigned_doctors_count} {dept.assigned_doctors_count === 1 ? 'Doctor' : 'Doctors'}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800/60 border border-slate-700/30 text-slate-500">
+                                0 Doctors
+                              </span>
+                            )}
+                          </td>
                           <td className="px-6 py-4">
                             <button
                               onClick={() => handleToggleStatus(dept)}

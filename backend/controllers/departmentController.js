@@ -256,19 +256,42 @@ export async function updateDepartmentDesignations(req, res) {
   }
 }
 
+function getDeptAliases(name) {
+  const n = (name || '').trim().toUpperCase();
+  if (n === 'CTVS' || n === 'CARDIOTHORACIC AND VASCULAR SURGERY') {
+    return ['CTVS', 'CARDIOTHORACIC AND VASCULAR SURGERY'];
+  }
+  if (n === 'ENT' || n === 'EAR NOSE AND THROAT') {
+    return ['ENT', 'EAR NOSE AND THROAT'];
+  }
+  return [n];
+}
+
 export async function getDoctorsOrder(req, res) {
   const { id } = req.params;
   try {
     const pool = getPool();
+    const [deptRows] = await pool.query(
+      'SELECT id, name, branch_id, location_id FROM departments WHERE id = ?',
+      [id]
+    );
+    if (deptRows.length === 0) {
+      return res.status(404).json({ message: 'Department not found.' });
+    }
+    const targetDept = deptRows[0];
+    const aliases = getDeptAliases(targetDept.name);
+
     const [rows] = await pool.query(
-      `SELECT d.id AS doctor_id, d.name, d.designation, da.display_order
+      `SELECT DISTINCT d.id AS doctor_id, d.name, d.designation, da.display_order, COALESCE(dd.sort_order, 99) AS desig_sort_order
        FROM doctor_assignments da
-       JOIN doctors d ON da.doctor_id = d.id
-       LEFT JOIN department_designations dd ON dd.department_id = da.department_id
+       JOIN doctors d ON da.doctor_id = d.id AND d.status = 1
+       LEFT JOIN departments dept ON da.department_id = dept.id
+       LEFT JOIN department_designations dd ON dd.department_id = ?
             AND UPPER(dd.designation) = UPPER(d.designation)
        WHERE da.department_id = ?
-       ORDER BY COALESCE(dd.sort_order, 99) ASC, da.display_order ASC, d.name ASC`,
-      [id]
+          OR (da.branch_id = ? AND TRIM(UPPER(dept.name)) IN (?))
+       ORDER BY desig_sort_order ASC, da.display_order ASC, d.name ASC`,
+      [id, id, targetDept.branch_id, aliases]
     );
     return res.status(200).json(rows);
   } catch (error) {
@@ -282,12 +305,30 @@ export async function updateDoctorsOrder(req, res) {
   const { orders } = req.body; // [{ doctor_id, display_order }]
   try {
     const pool = getPool();
+    const [deptRows] = await pool.query(
+      'SELECT id, name, branch_id, location_id FROM departments WHERE id = ?',
+      [id]
+    );
+    const targetDept = deptRows[0] || null;
+    const aliases = targetDept ? getDeptAliases(targetDept.name) : [];
+
     if (orders && orders.length > 0) {
       for (const item of orders) {
-        await pool.query(
-          'UPDATE doctor_assignments SET display_order = ? WHERE department_id = ? AND doctor_id = ?',
-          [item.display_order, id, item.doctor_id]
-        );
+        if (targetDept) {
+          await pool.query(
+            `UPDATE doctor_assignments da
+             LEFT JOIN departments dept ON da.department_id = dept.id
+             SET da.display_order = ?
+             WHERE da.doctor_id = ?
+               AND (da.department_id = ? OR (da.branch_id = ? AND TRIM(UPPER(dept.name)) IN (?)))`,
+            [item.display_order, item.doctor_id, id, targetDept.branch_id, aliases]
+          );
+        } else {
+          await pool.query(
+            'UPDATE doctor_assignments SET display_order = ? WHERE department_id = ? AND doctor_id = ?',
+            [item.display_order, id, item.doctor_id]
+          );
+        }
       }
     }
     notifyUpdate();

@@ -12,6 +12,7 @@ export class Department {
     this.updated_at = row.updated_at;
     this.branch_name = row.branch_name || null;
     this.location_name = row.location_name || null;
+    this.assigned_doctors_count = Number(row.assigned_doctors_count || 0);
   }
 
   toPublic() {
@@ -26,6 +27,7 @@ export class Department {
       branch_name: this.branch_name,
       location_name: this.location_name,
       branch: this.branch_name, // fallback for legacy views
+      assigned_doctors_count: this.assigned_doctors_count,
     };
   }
 }

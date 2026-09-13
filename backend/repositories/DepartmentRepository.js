@@ -8,7 +8,16 @@ export class DepartmentRepository {
   async findAll(branchId = null, locationId = null, status = null) {
     const pool = getPool();
     let query = `
-      SELECT d.*, b.name AS branch_name, l.name AS location_name 
+      SELECT d.*, b.name AS branch_name, l.name AS location_name,
+             (SELECT COUNT(DISTINCT da.doctor_id) 
+              FROM doctor_assignments da 
+              JOIN doctors doc ON da.doctor_id = doc.id AND doc.status = 1
+              LEFT JOIN departments d2 ON da.department_id = d2.id
+              WHERE da.department_id = d.id 
+                 OR (da.branch_id = d.branch_id AND TRIM(UPPER(d2.name)) = TRIM(UPPER(d.name)))
+                 OR (da.branch_id = d.branch_id AND TRIM(UPPER(d.name)) IN ('CTVS', 'CARDIOTHORACIC AND VASCULAR SURGERY') AND TRIM(UPPER(d2.name)) IN ('CTVS', 'CARDIOTHORACIC AND VASCULAR SURGERY'))
+                 OR (da.branch_id = d.branch_id AND TRIM(UPPER(d.name)) IN ('ENT', 'EAR NOSE AND THROAT') AND TRIM(UPPER(d2.name)) IN ('ENT', 'EAR NOSE AND THROAT'))
+             ) AS assigned_doctors_count
       FROM departments d
       JOIN branches b ON d.branch_id = b.id
       JOIN locations l ON d.location_id = l.id
@@ -45,7 +54,16 @@ export class DepartmentRepository {
     const pool = getPool();
     // Returns all departments whose location is in the user's assigned locations (user_locations table)
     let query = `
-      SELECT d.*, b.name AS branch_name, l.name AS location_name 
+      SELECT d.*, b.name AS branch_name, l.name AS location_name,
+             (SELECT COUNT(DISTINCT da.doctor_id) 
+              FROM doctor_assignments da 
+              JOIN doctors doc ON da.doctor_id = doc.id AND doc.status = 1
+              LEFT JOIN departments d2 ON da.department_id = d2.id
+              WHERE da.department_id = d.id 
+                 OR (da.branch_id = d.branch_id AND TRIM(UPPER(d2.name)) = TRIM(UPPER(d.name)))
+                 OR (da.branch_id = d.branch_id AND TRIM(UPPER(d.name)) IN ('CTVS', 'CARDIOTHORACIC AND VASCULAR SURGERY') AND TRIM(UPPER(d2.name)) IN ('CTVS', 'CARDIOTHORACIC AND VASCULAR SURGERY'))
+                 OR (da.branch_id = d.branch_id AND TRIM(UPPER(d.name)) IN ('ENT', 'EAR NOSE AND THROAT') AND TRIM(UPPER(d2.name)) IN ('ENT', 'EAR NOSE AND THROAT'))
+             ) AS assigned_doctors_count
       FROM departments d
       JOIN branches b ON d.branch_id = b.id
       JOIN locations l ON d.location_id = l.id
@@ -107,7 +125,16 @@ export class DepartmentRepository {
     const order = sortOrder?.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
 
     let baseQuery = `
-      SELECT d.*, b.name AS branch_name, l.name AS location_name 
+      SELECT d.*, b.name AS branch_name, l.name AS location_name,
+             (SELECT COUNT(DISTINCT da.doctor_id) 
+              FROM doctor_assignments da 
+              JOIN doctors doc ON da.doctor_id = doc.id AND doc.status = 1
+              LEFT JOIN departments d2 ON da.department_id = d2.id
+              WHERE da.department_id = d.id 
+                 OR (da.branch_id = d.branch_id AND TRIM(UPPER(d2.name)) = TRIM(UPPER(d.name)))
+                 OR (da.branch_id = d.branch_id AND TRIM(UPPER(d.name)) IN ('CTVS', 'CARDIOTHORACIC AND VASCULAR SURGERY') AND TRIM(UPPER(d2.name)) IN ('CTVS', 'CARDIOTHORACIC AND VASCULAR SURGERY'))
+                 OR (da.branch_id = d.branch_id AND TRIM(UPPER(d.name)) IN ('ENT', 'EAR NOSE AND THROAT') AND TRIM(UPPER(d2.name)) IN ('ENT', 'EAR NOSE AND THROAT'))
+             ) AS assigned_doctors_count
       FROM departments d
       JOIN branches b ON d.branch_id = b.id
       JOIN locations l ON d.location_id = l.id

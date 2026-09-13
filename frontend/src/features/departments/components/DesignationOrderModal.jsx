@@ -108,6 +108,7 @@ export function DesignationOrderModal({ isOpen, onClose, department }) {
   const [designations, setDesignations] = useState([]);
   const [doctorGroups, setDoctorGroups] = useState({}); // { designation: [doctor, ...] }
   const [loading, setLoading] = useState(false);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const sensors = useSensors(
@@ -153,6 +154,7 @@ export function DesignationOrderModal({ isOpen, onClose, department }) {
   };
 
   const fetchDoctorsOrder = async () => {
+    setLoadingDoctors(true);
     try {
       const response = await api.get(`/departments/${department.id}/doctors-order`);
       const doctors = response.data || [];
@@ -167,6 +169,9 @@ export function DesignationOrderModal({ isOpen, onClose, department }) {
       setDoctorGroups(groups);
     } catch (err) {
       console.error(err);
+      toast.error('Failed to load doctor priority order.');
+    } finally {
+      setLoadingDoctors(false);
     }
   };
 
@@ -226,12 +231,29 @@ export function DesignationOrderModal({ isOpen, onClose, department }) {
   };
 
   const groupKeys = Object.keys(doctorGroups);
+  const totalDoctorCount = Object.values(doctorGroups).reduce((acc, g) => acc + g.length, 0);
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={department ? `${department.name} - Configuration` : 'Configuration'}
+      title={
+        department ? (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-white font-bold tracking-wide">{department.name}</span>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                {department.branch_name || department.branch}
+              </span>
+              <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
+                {department.location_name}
+              </span>
+            </div>
+          </div>
+        ) : (
+          'Configuration'
+        )
+      }
       closeOnBackdropClick={false}
       closeOnEscape={false}
     >
@@ -260,7 +282,11 @@ export function DesignationOrderModal({ isOpen, onClose, department }) {
             }`}
           >
             <Users className="w-4 h-4" />
-            Doctor Priority
+            Doctor Priority {totalDoctorCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
+                {totalDoctorCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -303,9 +329,27 @@ export function DesignationOrderModal({ isOpen, onClose, department }) {
               Drag and drop doctors within each designation group to set who appears first on the Digital Signage screen.
             </p>
 
-            {groupKeys.length === 0 ? (
-              <div className="flex justify-center items-center py-12 text-slate-500 text-sm">
-                No doctors assigned to this department.
+            {loadingDoctors ? (
+              <div className="flex flex-col justify-center items-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mb-2" />
+                <span className="text-xs text-slate-400 font-medium">Loading doctors...</span>
+              </div>
+            ) : groupKeys.length === 0 ? (
+              <div className="flex flex-col justify-center items-center py-10 px-4 text-center bg-slate-950/40 rounded-xl border border-slate-800/80">
+                <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mb-3">
+                  <Users className="w-6 h-6 text-slate-500" />
+                </div>
+                <div className="text-slate-300 font-semibold text-sm">
+                  No doctors assigned to this block
+                </div>
+                <p className="text-xs text-slate-400 max-w-sm mt-1.5 leading-relaxed">
+                  No doctors are currently assigned to <span className="text-emerald-400 font-semibold">{department?.name}</span> at <span className="text-slate-200 font-semibold">{department?.branch_name || department?.branch} ({department?.location_name})</span>.
+                </p>
+                <div className="mt-4 p-3 rounded-lg bg-slate-900/60 border border-slate-800 text-left max-w-sm w-full">
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    💡 <span className="font-semibold text-slate-300">To show doctors here:</span> Assign doctors to this branch & block in <span className="text-emerald-400 font-medium">Doctor Directory</span>.
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
