@@ -10,7 +10,6 @@ import DisplayFooter from '../components/DisplayFooter';
 import DepartmentHeader from '../components/DepartmentHeader';
 import DoctorCard from '../components/DoctorCard';
 import bannerImg from '../../../common/assets/Banner.png';
-import banner2Img from '../../../common/assets/Banner2.png';
 import bgImg from '../../../common/assets/bg.png';
 
 const formatLocationForUrl = (loc) => {
@@ -194,8 +193,8 @@ const DisplayScreen = () => {
               className="flex-1 flex items-center justify-center overflow-hidden min-h-0 w-full h-full"
             >
               <img
-                src={currentPage.bannerNumber === 2 || currentPage.bannerType === 'tariff' ? banner2Img : bannerImg}
-                alt={currentPage.bannerNumber === 2 || currentPage.bannerType === 'tariff' ? "Service Tariff List" : "KIMS Banner"}
+                src={bannerImg}
+                alt="KIMS Banner"
                 className="w-full h-full object-fill"
               />
             </motion.div>

@@ -121,13 +121,12 @@ export const ssccConfig = {
     );
 
     // Phase 4: Interleave combined + location pages with banners and videos
-    // Sequence required:
-    // SSCC All Doctors -> Banner 1 -> Video 1 -> Particular KSS/KCC Doctors -> Banner 2 -> Video 2 -> Loop starts from SSCC
+    // Sequence:
+    // SSCC All Doctors -> Banner 1 -> Video 1 -> Particular KSS/KCC Doctors -> Video 2 (in place of Banner 2) -> Video 3 -> Loop starts from SSCC
     const allPages = [];
     const hasAnyDoctors = combinedPages.length > 0 || locationPages.length > 0;
 
     const banner1 = { isBanner: true, duration: 10, bannerNumber: 1, bannerType: 'general' };
-    const banner2 = { isBanner: true, duration: 10, bannerNumber: 2, bannerType: 'tariff' };
 
     if (allBranchVideos.length === 0) {
       if (combinedPages.length > 0) {
@@ -140,12 +139,15 @@ export const ssccConfig = {
       if (locationPages.length > 0) {
         allPages.push(...locationPages);
       }
-      allPages.push(banner2);
     } else {
-      // Pair videos in steps of 2 to maintain the alternating slot rhythm
-      for (let i = 0; i < allBranchVideos.length; i += 2) {
+      // Step through videos in groups of 3:
+      // Video 1 -> after Banner 1
+      // Video 2 -> after Particular Doctors (in place of Banner 2)
+      // Video 3 -> after Video 2
+      for (let i = 0; i < allBranchVideos.length; i += 3) {
         const v1 = allBranchVideos[i];
         const v2 = allBranchVideos[i + 1];
+        const v3 = allBranchVideos[i + 2];
 
         // Slot 1: SSCC All Doctors -> Banner 1 -> Video 1
         if (combinedPages.length > 0) {
@@ -158,13 +160,15 @@ export const ssccConfig = {
           allPages.push({ isVideo: true, duration: v1.duration, videoUrl: v1.url });
         }
 
-        // Slot 2: Particular KSS/KCC Doctors -> Banner 2 -> Video 2
+        // Slot 2: Particular KSS/KCC Doctors -> Video 2 (in place of Banner 2) -> Video 3
         if (locationPages.length > 0) {
           allPages.push(...locationPages);
         }
-        allPages.push(banner2);
         if (v2) {
           allPages.push({ isVideo: true, duration: v2.duration, videoUrl: v2.url });
+        }
+        if (v3) {
+          allPages.push({ isVideo: true, duration: v3.duration, videoUrl: v3.url });
         }
       }
     }
