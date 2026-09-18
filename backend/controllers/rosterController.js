@@ -53,6 +53,27 @@ async function resolveLocation(branch, locParam) {
   return locParam; // Fallback
 }
 
+// Normalize doctor name for flexible comparison (strips Dr./Prof. prefixes, collapses whitespace)
+function normalizeDocName(name) {
+  if (!name) return '';
+  let n = String(name).trim().toLowerCase();
+  n = n.replace(/^(prof\.\s*dr\.|prof\.|dr\.)\s*/i, '');
+  n = n.replace(/^(dr|prof)\s+/i, '');
+  return n.trim().replace(/\s+/g, ' ');
+}
+
+// Map department aliases (e.g. CTVS <-> CARDIOTHORACIC AND VASCULAR SURGERY)
+function getDeptAliases(name) {
+  const n = (name || '').trim().toUpperCase();
+  if (n === 'CTVS' || n === 'CARDIOTHORACIC AND VASCULAR SURGERY') {
+    return ['CTVS', 'CARDIOTHORACIC AND VASCULAR SURGERY'];
+  }
+  if (n === 'ENT' || n === 'EAR NOSE AND THROAT') {
+    return ['ENT', 'EAR NOSE AND THROAT'];
+  }
+  return [n];
+}
+
 export async function downloadTemplate(req, res) {
   const { branch, date } = req.query;
   if (!branch) {
@@ -192,23 +213,46 @@ export async function previewRoster(req, res) {
     const departmentMap = {};
     departments.forEach(dept => {
       departmentMap[dept.name.toLowerCase()] = dept.id;
+      const aliases = getDeptAliases(dept.name);
+      aliases.forEach(a => {
+        departmentMap[a.toLowerCase()] = dept.id;
+      });
     });
 
-    // Fetch all active doctors for this branch
+    // 1. Fetch all active doctors in system to distinguish between "doctor doesn't exist" vs "wrong branch"
+    const allSystemDoctors = await doctorRepository.findWithFilters({ status: 1 });
+    const systemDoctorNames = new Set(allSystemDoctors.map(d => normalizeDocName(d.name)));
+
+    // 2. Fetch all active doctors for this specific branch
     const doctorsList = await doctorRepository.findWithFilters({ branches: [branch], status: 1 });
     const doctorLookup = {};
     const docBranchBlockMap = {}; // Maps nameKey -> assigned block for this branch
+    const branchDoctorNames = new Set();
+    const branchDoctorDepts = {}; // Maps nameKey -> Set of department names
+
     doctorsList.forEach(doc => {
-      let nameKey = doc.name.trim().toLowerCase();
-      if (nameKey.startsWith('dr. ')) nameKey = nameKey.substring(4);
-      else if (nameKey.startsWith('dr ')) nameKey = nameKey.substring(3);
-      nameKey = nameKey.trim();
-      
+      const nameKey = normalizeDocName(doc.name);
+      branchDoctorNames.add(nameKey);
+      if (!branchDoctorDepts[nameKey]) {
+        branchDoctorDepts[nameKey] = new Set();
+      }
+
       if (doc.assignments && doc.assignments.length > 0) {
         doc.assignments.forEach(assignment => {
           if (assignment.branch_name && assignment.branch_name.toLowerCase() === branch.toLowerCase()) {
             doctorLookup[`${nameKey}_${assignment.department_id}`] = doc;
-            docBranchBlockMap[nameKey] = assignment.location_name.toLowerCase();
+            if (assignment.department_name) {
+              doctorLookup[`${nameKey}_${assignment.department_name.toLowerCase()}`] = doc;
+              branchDoctorDepts[nameKey].add(assignment.department_name.toLowerCase());
+              const aliases = getDeptAliases(assignment.department_name);
+              aliases.forEach(a => {
+                doctorLookup[`${nameKey}_${a.toLowerCase()}`] = doc;
+                branchDoctorDepts[nameKey].add(a.toLowerCase());
+              });
+            }
+            if (assignment.location_name) {
+              docBranchBlockMap[nameKey] = assignment.location_name.toLowerCase();
+            }
           }
         });
       }
@@ -312,33 +356,46 @@ export async function previewRoster(req, res) {
       if (!rowDocName) {
         errors.push(`Row ${rowNum}: Doctor Name is empty.`);
       } else {
-        let docNameLower = rowDocName.trim().toLowerCase();
-        if (docNameLower.startsWith('dr. ')) docNameLower = docNameLower.substring(4);
-        else if (docNameLower.startsWith('dr ')) docNameLower = docNameLower.substring(3);
-        docNameLower = docNameLower.trim();
-        
-        // 1. Validate against DB configuration
-        const expectedBlock = docBranchBlockMap[docNameLower];
-        if (expectedBlock && rowBlock && rowBlock.toLowerCase() !== expectedBlock) {
-           errors.push(`Row ${rowNum}: Doctor '${rowDocName}' is assigned to block '${expectedBlock}' in this branch, but Excel says '${rowBlock}'.`);
-        }
+        const docNameKey = normalizeDocName(rowDocName);
 
-        // 2. Validate against other rows in the Excel sheet
-        if (rowBlock) {
-           const trackedBlock = excelDocBlockTracker[docNameLower];
-           if (trackedBlock && trackedBlock !== rowBlock.toLowerCase()) {
-              errors.push(`Row ${rowNum}: Doctor '${rowDocName}' is scheduled in multiple blocks ('${trackedBlock}' and '${rowBlock}') within the same Excel sheet.`);
-           } else {
-              excelDocBlockTracker[docNameLower] = rowBlock.toLowerCase();
-           }
-        }
+        // 1. Validate if doctor exists in the Doctor Directory at all
+        if (!systemDoctorNames.has(docNameKey)) {
+          errors.push(`Row ${rowNum}: No such doctor exists in Doctor Directory: '${rowDocName}'. Please verify the doctor name spelling.`);
+        } else if (!branchDoctorNames.has(docNameKey)) {
+          // Doctor exists in the hospital, but not assigned to this branch
+          errors.push(`Row ${rowNum}: Doctor '${rowDocName}' is registered in Doctor Directory, but is not assigned to branch '${branch}'.`);
+        } else {
+          // 2. Validate block/location assignment
+          const expectedBlock = docBranchBlockMap[docNameKey];
+          if (expectedBlock && rowBlock && rowBlock.toLowerCase() !== expectedBlock) {
+            errors.push(`Row ${rowNum}: Doctor '${rowDocName}' is assigned to block '${expectedBlock.toUpperCase()}' in this branch, but Excel says '${rowBlock}'.`);
+          }
 
-        if (deptId) {
-          const key = `${docNameLower}_${deptId}`;
-          const matchedDoc = doctorLookup[key];
+          // 3. Validate against multiple blocks in the same Excel sheet
+          if (rowBlock) {
+            const trackedBlock = excelDocBlockTracker[docNameKey];
+            if (trackedBlock && trackedBlock !== rowBlock.toLowerCase()) {
+              errors.push(`Row ${rowNum}: Doctor '${rowDocName}' is scheduled in multiple blocks ('${trackedBlock.toUpperCase()}' and '${rowBlock.toUpperCase()}') within the same Excel sheet.`);
+            } else {
+              excelDocBlockTracker[docNameKey] = rowBlock.toLowerCase();
+            }
+          }
+
+          // 4. Validate department assignment
+          let matchedDoc = null;
+          if (deptId) {
+            matchedDoc = doctorLookup[`${docNameKey}_${deptId}`] || 
+                         (rowDept ? doctorLookup[`${docNameKey}_${rowDept.trim().toLowerCase()}`] : null);
+          }
+
           if (!matchedDoc) {
-            // We intentionally DO NOT throw an error for missing doctor, as per requirements: 
-            // "if does not then doctor name should not display in roaster". We just leave doctorId null.
+            const assignedDepts = branchDoctorDepts[docNameKey];
+            if (assignedDepts && assignedDepts.size > 0) {
+              const deptsStr = Array.from(assignedDepts).map(d => d.toUpperCase()).join(', ');
+              errors.push(`Row ${rowNum}: Doctor '${rowDocName}' is not assigned to department '${rowDept}' in branch '${branch}' (Assigned to: ${deptsStr}).`);
+            } else {
+              errors.push(`Row ${rowNum}: Doctor '${rowDocName}' is not assigned to department '${rowDept}' in branch '${branch}'.`);
+            }
           } else {
             employeeId = matchedDoc.employee_id;
             doctorId = matchedDoc.id;
@@ -423,7 +480,7 @@ export async function importRoster(req, res) {
         return res.status(400).json({ message: 'Past rosters cannot be modified. Cannot import roster for past dates.' });
       }
       if (!item.doctor_id) {
-         // Skip doctors that were invalid in Excel
+         missingDoctors.push(item.doctor_name || item.employee_id || 'Unknown Doctor');
          continue;
       }
       const doctor = await doctorRepository.findById(item.doctor_id);

@@ -867,25 +867,41 @@ const Roster = () => {
 
       {/* Validation Errors Modal */}
       {showValidationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="glass-panel w-full max-w-lg rounded-2xl border border-rose-500/30 bg-slate-900 p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3 text-rose-400 border-b border-slate-800 pb-3">
-              <AlertTriangle className="w-6 h-6 flex-shrink-0" />
-              <div>
-                <h3 className="text-lg font-heading font-semibold text-white">Roster Validation Errors</h3>
-                <p className="text-xs text-rose-400/80">Please resolve these errors in your spreadsheet and upload again.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="glass-panel w-full max-w-xl rounded-2xl border border-rose-500/30 bg-slate-900 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3 text-rose-400">
+                <AlertTriangle className="w-6 h-6 flex-shrink-0" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-heading font-semibold text-white">Roster Validation Errors</h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                      {validationErrors.length} {validationErrors.length === 1 ? 'Error' : 'Errors'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-rose-400/80 mt-0.5">Please resolve these errors in your spreadsheet and upload again.</p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowValidationModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="max-h-60 overflow-y-auto space-y-2 pr-1 font-mono text-xs text-rose-300 bg-slate-950/60 p-4 rounded-xl border border-slate-850">
+            <div className="max-h-72 overflow-y-auto space-y-2 pr-1 font-mono text-xs text-rose-300 bg-slate-950/60 p-4 rounded-xl border border-slate-850">
               {validationErrors.map((err, idx) => (
-                <div key={idx} className="flex gap-2 items-start py-1 border-b border-slate-900 last:border-0">
-                  <span className="text-rose-500 flex-shrink-0">•</span>
-                  <span>{err}</span>
+                <div key={idx} className="flex gap-2 items-start py-1.5 border-b border-slate-900 last:border-0">
+                  <span className="text-rose-500 font-bold flex-shrink-0">•</span>
+                  <span className="leading-relaxed">{err}</span>
                 </div>
               ))}
             </div>
             <div className="flex justify-end pt-2">
               <button
+                type="button"
                 onClick={() => setShowValidationModal(false)}
                 className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
               >
