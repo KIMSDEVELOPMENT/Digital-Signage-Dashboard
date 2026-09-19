@@ -77,15 +77,17 @@ export const useDisplayPlaylist = (branch, location) => {
 
     connectSSE();
 
-    // Background fail-safe polling interval (every 60s) to guarantee displays stay updated
-    const fallbackPollInterval = setInterval(() => {
+    // Auto-refresh interval (every 10 minutes) for all departments in the display screen
+    const AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+    const autoRefreshInterval = setInterval(() => {
+      console.log('[DisplayScreen] 10-minute scheduled refresh: Re-fetching playlist for all departments...');
       fetchAndBuild(true);
-    }, 60000);
+    }, AUTO_REFRESH_INTERVAL_MS);
 
     return () => {
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (eventSource) eventSource.close();
-      clearInterval(fallbackPollInterval);
+      clearInterval(autoRefreshInterval);
     };
   }, [branch, location]);
 
