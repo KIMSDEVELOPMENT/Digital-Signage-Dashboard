@@ -27,39 +27,65 @@ export const useDisplayPlaylist = (branch, location) => {
 
     const config = getBranchConfig(branch);
 
-    const fetchAndBuild = async () => {
+    const fetchAndBuild = async (silent = false) => {
       try {
-        setLoading(true);
+        if (!silent) setLoading(true);
         const { pages: builtPages, playlist: builtPlaylist } = await config.buildPages(branch, location);
         setPages(builtPages);
         setPlaylist(builtPlaylist);
         setError(null);
       } catch (err) {
         console.error('Error fetching display playlist:', err);
-        setError(`Unable to load display configuration. Error: ${err.message || 'Unknown Network Error'}`);
+        if (!silent) {
+          setError(`Unable to load display configuration. Error: ${err.message || 'Unknown Network Error'}`);
+        }
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
     };
 
     // Initial fetch
     fetchAndBuild();
 
-    // SSE — real-time updates: re-fetch the entire playlist when server notifies
-    const eventSource = new EventSource(SSE_URL);
-    eventSource.onmessage = (event) => {
-      if (event.data === 'update') {
-        console.log('[SSE] Real-time update received — refreshing playlist...');
-        fetchAndBuild();
+    // SSE — real-time updates: re-fetch the entire playlist immediately when server notifies
+    let eventSource = null;
+    let reconnectTimeout = null;
+
+    const connectSSE = () => {
+      try {
+        if (eventSource) eventSource.close();
+        eventSource = new EventSource(SSE_URL);
+
+        eventSource.onmessage = (event) => {
+          const data = event.data;
+          if (data === 'update' || data === '"update"' || (typeof data === 'string' && data.includes('update'))) {
+            console.log('[SSE] Real-time update received — refreshing display playlist immediately...');
+            fetchAndBuild(true);
+          }
+        };
+
+        eventSource.onerror = (err) => {
+          console.warn('[SSE] Connection error (retrying in 5s)...', err);
+          eventSource.close();
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(connectSSE, 5000);
+        };
+      } catch (e) {
+        console.error('[SSE] Failed to initialize EventSource:', e);
       }
     };
-    eventSource.onerror = (err) => {
-      // EventSource automatically reconnects; just log it
-      console.warn('[SSE] Connection error (will retry):', err);
-    };
+
+    connectSSE();
+
+    // Background fail-safe polling interval (every 60s) to guarantee displays stay updated
+    const fallbackPollInterval = setInterval(() => {
+      fetchAndBuild(true);
+    }, 60000);
 
     return () => {
-      eventSource.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (eventSource) eventSource.close();
+      clearInterval(fallbackPollInterval);
     };
   }, [branch, location]);
 

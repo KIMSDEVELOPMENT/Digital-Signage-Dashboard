@@ -249,6 +249,7 @@ export async function updateDepartmentDesignations(req, res) {
         );
       }
     }
+    notifyUpdate();
     return res.status(200).json({ message: 'Designations updated successfully.' });
   } catch (error) {
     console.error('Update designations error:', error);

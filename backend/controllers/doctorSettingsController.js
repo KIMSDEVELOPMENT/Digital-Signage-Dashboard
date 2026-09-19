@@ -1,6 +1,7 @@
 import sittingRepository from '../repositories/SittingRepository.js';
 import doctorRepository from '../repositories/DoctorRepository.js';
 import userRepository from '../repositories/UserRepository.js';
+import { notifyUpdate } from '../utils/sse.js';
 
 export const searchDoctors = async (req, res) => {
   try {
@@ -58,6 +59,7 @@ export const saveSitting = async (req, res) => {
     }
 
     await sittingRepository.upsertSitting(employee_id, parsedBranchId, parsedLocationId, display_days);
+    notifyUpdate();
     
     res.json({ message: 'Settings configuration saved successfully' });
   } catch (error) {

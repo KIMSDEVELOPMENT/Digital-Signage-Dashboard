@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../../app/context/AuthContext';
 import api from '../../../common/services/api';
 import { 
@@ -59,8 +59,12 @@ const Roster = () => {
   const [editDoctorId, setEditDoctorId] = useState('');
   
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const [itemsPerPage, setItemsPerPage] = useState(5);
   const [locationDoctors, setLocationDoctors] = useState([]);
+  
+  // Roster Filter & Search States
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
   
   // States
   const [file, setFile] = useState(null);
@@ -81,6 +85,41 @@ const Roster = () => {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [duplicateExists, setDuplicateExists] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Extract unique departments from todayRoster for the department filter dropdown
+  const uniqueDepartments = useMemo(() => {
+    if (!todayRoster || todayRoster.length === 0) return [];
+    const depts = new Set();
+    todayRoster.forEach(item => {
+      if (item.department_name && item.department_name.trim()) {
+        depts.add(item.department_name.trim());
+      }
+    });
+    return Array.from(depts).sort((a, b) => a.localeCompare(b));
+  }, [todayRoster]);
+
+  // Memoized filtered roster matching doctor name, emp ID, or department
+  const filteredRoster = useMemo(() => {
+    if (!todayRoster || todayRoster.length === 0) return [];
+    return todayRoster.filter(item => {
+      if (filterDepartment && item.department_name?.trim() !== filterDepartment) {
+        return false;
+      }
+      if (rosterSearch.trim()) {
+        const query = rosterSearch.toLowerCase().trim();
+        const docName = (item.doctor_name || '').toLowerCase();
+        const empId = (item.employee_id || '').toLowerCase();
+        const deptName = (item.department_name || '').toLowerCase();
+        return docName.includes(query) || empId.includes(query) || deptName.includes(query);
+      }
+      return true;
+    });
+  }, [todayRoster, filterDepartment, rosterSearch]);
+
+  // Reset page to 1 when filters, date or location change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [rosterSearch, filterDepartment, selectedBranch, selectedLocation, selectedDate]);
 
   // Fetch registered doctors for the selected location to populate edit dropdown
   useEffect(() => {
@@ -120,11 +159,11 @@ const Roster = () => {
     }
   }, [selectedBranch, branchLocations, user]);
 
-  const fetchRoster = async () => {
+  const fetchRoster = async (silent = false) => {
     if (!selectedBranch || !selectedDate) return;
     
     try {
-      setLoadingRoster(true);
+      if (!silent) setLoadingRoster(true);
       // For normal_admin: don't filter by location — show all scheduled doctors for the branch.
       // super_admin may optionally filter by a specific block they select.
       const locationParam = (user.role === 'super_admin' && selectedLocation) ? selectedLocation : undefined;
@@ -132,18 +171,66 @@ const Roster = () => {
         params: { branch: selectedBranch, location: locationParam, date: selectedDate }
       });
       setTodayRoster(res.data);
-      setCurrentPage(1); // Reset page on fetch
+      if (!silent) setCurrentPage(1); // Reset page on user-triggered fetch
     } catch (err) {
       console.error(err);
-      setTodayRoster([]);
+      if (!silent) setTodayRoster([]);
     } finally {
-      setLoadingRoster(false);
+      if (!silent) setLoadingRoster(false);
     }
   };
 
   useEffect(() => {
     fetchRoster();
   }, [selectedBranch, selectedLocation, selectedDate]);
+
+  // Real-time auto-refresh when any changes occur in the database / roster
+  useEffect(() => {
+    const sseUrl = import.meta.env.VITE_API_URL 
+      ? `${import.meta.env.VITE_API_URL}/display/stream` 
+      : `${window.location.origin}/api/display/stream`;
+
+    let es = null;
+    let reconnectTimeout = null;
+    let debounceTimer = null;
+
+    const connectSSE = () => {
+      try {
+        if (es) es.close();
+        es = new EventSource(sseUrl);
+
+        es.onmessage = (event) => {
+          const data = event.data;
+          if (data === 'update' || data === '"update"' || (typeof data === 'string' && data.includes('update'))) {
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+              // Silently refresh if user is not actively editing an inline row
+              if (!editingRosterId) {
+                fetchRoster(true);
+                if (activeTab === 'archives') fetchArchives();
+              }
+            }, 500);
+          }
+        };
+
+        es.onerror = () => {
+          es.close();
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(connectSSE, 5000);
+        };
+      } catch (err) {
+        console.warn('[Roster SSE] Connection failed:', err);
+      }
+    };
+
+    connectSSE();
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (es) es.close();
+    };
+  }, [selectedBranch, selectedLocation, selectedDate, activeTab, editingRosterId]);
 
   const fetchArchives = async () => {
     try {
@@ -650,122 +737,219 @@ const Roster = () => {
               {loadingRoster ? (
                 <TableSkeleton rows={4} cols={5} />
               ) : todayRoster.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-800/60">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-900/60 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
-                        <th className="px-4 py-3">Doctor</th>
-                        <th className="px-4 py-3">Employee ID</th>
-                        <th className="px-4 py-3">Department</th>
-                        <th className="px-4 py-3">Shift Timing</th>
-                        {hasPermission('Duty Roster', 'read') && !isPastDate && <th className="px-4 py-3 text-right">Actions</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-850/30">
-                      {todayRoster.slice((currentPage - 1) * itemsPerPage, (currentPage - 1) * itemsPerPage + itemsPerPage).map((item) => (
-                        <tr key={item.roster_id} className="hover:bg-slate-900/10 transition-colors">
-                          <td className="px-4 py-3 font-semibold text-white">
-                            {editingRosterId === item.roster_id ? (
-                              <select
-                                value={editDoctorId}
-                                onChange={(e) => setEditDoctorId(e.target.value)}
-                                className="px-2 py-1 bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-xs text-white rounded cursor-pointer max-w-[200px]"
-                              >
-                                {!locationDoctors.some(d => d.id === item.doctor_id) && (
-                                  <option value={item.doctor_id}>{item.doctor_name}</option>
-                                )}
-                                {locationDoctors.map((doc) => (
-                                  <option key={doc.id} value={doc.id}>
-                                    {doc.name}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              item.doctor_name
-                            )}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-slate-400">{item.employee_id}</td>
-                          <td className="px-4 py-3 text-slate-300">{item.department_name}</td>
-                          <td className="px-4 py-3 font-medium text-emerald-400">
-                            {editingRosterId === item.roster_id ? (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={editTiming}
-                                  onChange={(e) => setEditTiming(e.target.value)}
-                                  className="px-2 py-1 bg-slate-950 border border-slate-800 rounded text-xs text-white focus:border-emerald-500 focus:outline-none"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateTiming(item.roster_id)}
-                                  className="p-1.5 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors"
-                                  title="Save Changes"
-                                >
-                                  <Save className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingRosterId(null);
-                                    setEditTiming('');
-                                    setEditDoctorId('');
-                                  }}
-                                  className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors"
-                                  title="Cancel"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ) : (
-                              item.timing
-                            )}
-                          </td>
-                          {hasPermission('Duty Roster', 'read') && !isPastDate && (
-                            <td className="px-4 py-3 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                {editingRosterId !== item.roster_id && (
-                                  <button
-                                    onClick={() => {
-                                      setEditingRosterId(item.roster_id);
-                                      setEditTiming(item.timing);
-                                      setEditDoctorId(item.doctor_id);
-                                    }}
-                                    className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/20 transition-colors"
-                                    title="Edit Scheduled Doctor & Timing"
+                <div className="space-y-3">
+                  {/* Search & Filter Toolbar */}
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 p-3 rounded-xl bg-slate-900/40 border border-slate-800/80">
+                    <div className="flex flex-1 flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                      {/* Doctor / Emp ID / Dept Search Input */}
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={rosterSearch}
+                          onChange={(e) => setRosterSearch(e.target.value)}
+                          placeholder="Search doctor, emp ID, or department..."
+                          className="w-full pl-9 pr-8 py-2 rounded-lg text-xs bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-200 placeholder:text-slate-500 transition-all"
+                        />
+                        {rosterSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setRosterSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors cursor-pointer"
+                            title="Clear search"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Department Filter Dropdown */}
+                      <div className="w-full sm:w-56 shrink-0">
+                        <select
+                          value={filterDepartment}
+                          onChange={(e) => setFilterDepartment(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg text-xs bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-slate-300 cursor-pointer"
+                        >
+                          <option value="">All Departments ({uniqueDepartments.length})</option>
+                          {uniqueDepartments.map((dept) => (
+                            <option key={dept} value={dept}>
+                              {dept}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Clear All Filters Button */}
+                      {(rosterSearch || filterDepartment) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRosterSearch('');
+                            setFilterDepartment('');
+                          }}
+                          className="px-3 py-2 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 transition-colors flex items-center justify-center gap-1 shrink-0 cursor-pointer"
+                          title="Reset search and filters"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Clear</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Count pill */}
+                    <div className="flex items-center justify-between md:justify-end gap-2 text-xs shrink-0">
+                      <span className={`px-2.5 py-1 rounded-full font-semibold border ${
+                        rosterSearch || filterDepartment
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                          : 'bg-slate-800/40 border-slate-700/50 text-slate-400'
+                      }`}>
+                        {filteredRoster.length} of {todayRoster.length} {todayRoster.length === 1 ? 'Doctor' : 'Doctors'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {filteredRoster.length > 0 ? (
+                    <div className="overflow-x-auto rounded-xl border border-slate-800/60">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-slate-900/60 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                            <th className="px-4 py-3">Doctor</th>
+                            <th className="px-4 py-3">Employee ID</th>
+                            <th className="px-4 py-3">Department</th>
+                            <th className="px-4 py-3">Shift Timing</th>
+                            {hasPermission('Duty Roster', 'read') && !isPastDate && <th className="px-4 py-3 text-right">Actions</th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-850/30">
+                          {filteredRoster.slice((currentPage - 1) * itemsPerPage, (currentPage - 1) * itemsPerPage + itemsPerPage).map((item) => (
+                            <tr key={item.roster_id} className="hover:bg-slate-900/10 transition-colors">
+                              <td className="px-4 py-3 font-semibold text-white">
+                                {editingRosterId === item.roster_id ? (
+                                  <select
+                                    value={editDoctorId}
+                                    onChange={(e) => setEditDoctorId(e.target.value)}
+                                    className="px-2 py-1 bg-slate-950 border border-slate-800 focus:border-emerald-500/60 focus:outline-none text-xs text-white rounded cursor-pointer max-w-[200px]"
                                   >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
+                                    {!locationDoctors.some(d => d.id === item.doctor_id) && (
+                                      <option value={item.doctor_id}>{item.doctor_name}</option>
+                                    )}
+                                    {locationDoctors.map((doc) => (
+                                      <option key={doc.id} value={doc.id}>
+                                        {doc.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  item.doctor_name
                                 )}
-                                {(user?.role === 'super_admin' || hasPermission('Duty Roster', 'delete')) && (
-                                  <button
-                                    onClick={() => handleDeleteManualEntry(item.roster_id)}
-                                    className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"
-                                    title="Remove Entry"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+                              </td>
+                              <td className="px-4 py-3 font-mono text-slate-400">{item.employee_id}</td>
+                              <td className="px-4 py-3 text-slate-300">{item.department_name}</td>
+                              <td className="px-4 py-3 font-medium text-emerald-400">
+                                {editingRosterId === item.roster_id ? (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="text"
+                                      value={editTiming}
+                                      onChange={(e) => setEditTiming(e.target.value)}
+                                      className="px-2 py-1 bg-slate-950 border border-slate-800 rounded text-xs text-white focus:border-emerald-500 focus:outline-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateTiming(item.roster_id)}
+                                      className="p-1.5 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors"
+                                      title="Save Changes"
+                                    >
+                                      <Save className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingRosterId(null);
+                                        setEditTiming('');
+                                        setEditDoctorId('');
+                                      }}
+                                      className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors"
+                                      title="Cancel"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  item.timing
                                 )}
-                              </div>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {todayRoster.length > itemsPerPage && (
-                    <div className="border-t border-slate-800 bg-slate-900/40">
-                      <Pagination
-                        pagination={{
-                          page: currentPage,
-                          limit: itemsPerPage,
-                          totalRecords: todayRoster.length,
-                          totalPages: Math.ceil(todayRoster.length / itemsPerPage),
-                          hasNextPage: currentPage < Math.ceil(todayRoster.length / itemsPerPage),
-                          hasPreviousPage: currentPage > 1
+                              </td>
+                              {hasPermission('Duty Roster', 'read') && !isPastDate && (
+                                <td className="px-4 py-3 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    {editingRosterId !== item.roster_id && (
+                                      <button
+                                        onClick={() => {
+                                          setEditingRosterId(item.roster_id);
+                                          setEditTiming(item.timing);
+                                          setEditDoctorId(item.doctor_id);
+                                        }}
+                                        className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/20 transition-colors"
+                                        title="Edit Scheduled Doctor & Timing"
+                                      >
+                                        <Edit2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                    {(user?.role === 'super_admin' || hasPermission('Duty Roster', 'delete')) && (
+                                      <button
+                                        onClick={() => handleDeleteManualEntry(item.roster_id)}
+                                        className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/20 transition-colors"
+                                        title="Remove Entry"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {filteredRoster.length > 0 && (
+                        <div className="border-t border-slate-800 bg-slate-900/40">
+                          <Pagination
+                            pagination={{
+                              page: currentPage,
+                              limit: itemsPerPage,
+                              totalRecords: filteredRoster.length,
+                              totalPages: Math.ceil(filteredRoster.length / itemsPerPage) || 1,
+                              hasNextPage: currentPage < Math.ceil(filteredRoster.length / itemsPerPage),
+                              hasPreviousPage: currentPage > 1
+                            }}
+                            onPageChange={setCurrentPage}
+                            onLimitChange={(newLimit) => {
+                              setItemsPerPage(newLimit);
+                              setCurrentPage(1);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center border border-slate-800/40 bg-slate-950/20 rounded-xl space-y-3">
+                      <Search className="w-8 h-8 text-slate-600 mx-auto" />
+                      <div>
+                        <p className="text-sm font-semibold text-slate-300">No scheduled doctors found matching your criteria</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Try adjusting your search terms or clearing the department filter.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRosterSearch('');
+                          setFilterDepartment('');
                         }}
-                        onPageChange={setCurrentPage}
-                        onLimitChange={() => {}}
-                      />
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
+                      >
+                        Clear Filters
+                      </button>
                     </div>
                   )}
                 </div>

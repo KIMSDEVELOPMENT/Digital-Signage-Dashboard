@@ -1,4 +1,5 @@
 import { getPool } from '../config/db.js';
+import { notifyUpdate } from '../utils/sse.js';
 
 export const getSsccVideoOrder = async (req, res) => {
   try {
@@ -26,6 +27,7 @@ export const updateSsccVideoOrder = async (req, res) => {
        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
       [order]
     );
+    notifyUpdate();
     res.json({ message: 'Updated successfully', order });
   } catch (error) {
     console.error('Error updating sscc_video_order:', error);

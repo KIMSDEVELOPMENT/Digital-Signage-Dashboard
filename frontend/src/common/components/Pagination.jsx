@@ -58,7 +58,7 @@ const Pagination = ({ pagination, onPageChange, onLimitChange, loading = false }
     return pages;
   };
 
-  const pageSizes = [10, 25, 50, 100];
+  const pageSizes = [5, 10, 25, 50, 100];
 
   return (
     <div className="px-6 py-4 border-t border-slate-850 flex flex-col sm:flex-row items-center justify-between gap-4">

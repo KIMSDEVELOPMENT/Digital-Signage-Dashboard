@@ -126,7 +126,7 @@ const Department = () => {
       const es = new EventSource(`${baseUrl}/display/stream`);
       sseRef.current = es;
       es.onmessage = (event) => {
-        if (event.data === '"update"' || event.data === 'update') {
+        if (event.data === '"update"' || event.data === 'update' || (typeof event.data === 'string' && event.data.includes('update'))) {
           fetchDepartments(search);
         }
       };

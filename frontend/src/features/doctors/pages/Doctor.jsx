@@ -130,9 +130,9 @@ const Doctor = () => {
     setFilterDept('');
   }, [filterLocation, departments]);
 
-  const fetchDoctors = useCallback(async (currentSearch) => {
+  const fetchDoctors = useCallback(async (currentSearch, silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const params = { page, limit, sortBy, sortOrder };
 
       if (currentSearch) params.search = currentSearch;
@@ -145,15 +145,61 @@ const Doctor = () => {
       setPagination(res.data.pagination);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load doctors list.');
+      if (!silent) toast.error('Failed to load doctors list.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [page, limit, sortBy, sortOrder, filterBranch, filterLocation, filterDept]);
 
   useEffect(() => {
     fetchDoctors(search);
   }, [page, limit, sortBy, sortOrder, filterBranch, filterLocation, filterDept]);
+
+  // Real-time auto-refresh when any changes occur in the database / doctors
+  useEffect(() => {
+    const sseUrl = import.meta.env.VITE_API_URL 
+      ? `${import.meta.env.VITE_API_URL}/display/stream` 
+      : `${window.location.origin}/api/display/stream`;
+
+    let es = null;
+    let reconnectTimeout = null;
+    let debounceTimer = null;
+
+    const connectSSE = () => {
+      try {
+        if (es) es.close();
+        es = new EventSource(sseUrl);
+
+        es.onmessage = (event) => {
+          const data = event.data;
+          if (data === 'update' || data === '"update"' || (typeof data === 'string' && data.includes('update'))) {
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+              if (!isModalOpen && !cropModalOpen) {
+                fetchDoctors(search, true);
+              }
+            }, 500);
+          }
+        };
+
+        es.onerror = () => {
+          es.close();
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(connectSSE, 5000);
+        };
+      } catch (err) {
+        console.warn('[Doctor SSE] Connection failed:', err);
+      }
+    };
+
+    connectSSE();
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (es) es.close();
+    };
+  }, [fetchDoctors, search, isModalOpen, cropModalOpen]);
 
   const handleSearchChange = (e) => {
     const value = e.target.value;

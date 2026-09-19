@@ -29,7 +29,7 @@ export function sseStream(req, res) {
 export function notifyUpdate() {
   clients.forEach((client) => {
     try {
-      client.write('data: "update"\n\n');
+      client.write('data: update\n\n');
     } catch (err) {
       // client dropped
     }
