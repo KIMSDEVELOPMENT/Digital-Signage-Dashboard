@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getBranchConfig } from '../config/branchRegistry';
+import socket from '../../../common/services/socket';
 
 const SSE_URL = import.meta.env.VITE_API_URL 
   ? `${import.meta.env.VITE_API_URL}/display/stream` 
@@ -8,8 +9,8 @@ const SSE_URL = import.meta.env.VITE_API_URL
 /**
  * useDisplayPlaylist
  *
- * Encapsulates all data-fetching, playlist-building and SSE real-time
- * update logic that previously lived inside DisplayScreen.jsx.
+ * Encapsulates all data-fetching, playlist-building and real-time
+ * update logic that powers the digital signage screens.
  *
  * @param {string} branch   - branch slug from URL params (e.g. "sscc", "kims")
  * @param {string} location - location slug from URL params (e.g. "kss", "a-block")
@@ -47,7 +48,24 @@ export const useDisplayPlaylist = (branch, location) => {
     // Initial fetch
     fetchAndBuild();
 
-    // SSE — real-time updates: re-fetch the entire playlist immediately when server notifies
+    // ── 1. Socket.IO Real-Time Updates (Primary Engine) ────────────────────────
+    socket.emit('join:display', { branch, location });
+
+    const handleSignageRefresh = (payload) => {
+      console.log('[Socket.IO] Real-time signage:refresh received — updating display screen seamlessly:', payload);
+      fetchAndBuild(true);
+    };
+
+    const handleSocketConnect = () => {
+      console.log('[Socket.IO] Connected/Reconnected — re-syncing display data...');
+      socket.emit('join:display', { branch, location });
+      fetchAndBuild(true);
+    };
+
+    socket.on('signage:refresh', handleSignageRefresh);
+    socket.on('connect', handleSocketConnect);
+
+    // ── 2. SSE Stream (Secondary Redundancy) ────────────────────────────────────
     let eventSource = null;
     let reconnectTimeout = null;
 
@@ -77,7 +95,7 @@ export const useDisplayPlaylist = (branch, location) => {
 
     connectSSE();
 
-    // Auto-refresh interval (every 10 minutes) for all departments in the display screen
+    // ── 3. 10-Minute Periodic Auto-Refresh (Tertiary Fallback) ──────────────────
     const AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
     const autoRefreshInterval = setInterval(() => {
       console.log('[DisplayScreen] 10-minute scheduled refresh: Re-fetching playlist for all departments...');
@@ -85,6 +103,8 @@ export const useDisplayPlaylist = (branch, location) => {
     }, AUTO_REFRESH_INTERVAL_MS);
 
     return () => {
+      socket.off('signage:refresh', handleSignageRefresh);
+      socket.off('connect', handleSocketConnect);
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (eventSource) eventSource.close();
       clearInterval(autoRefreshInterval);

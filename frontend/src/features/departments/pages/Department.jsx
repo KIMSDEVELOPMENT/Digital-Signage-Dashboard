@@ -6,6 +6,7 @@ import { TableSkeleton } from '../../../common/components/Skeleton';
 import Pagination from '../../../common/components/Pagination';
 import { toast } from 'react-hot-toast';
 import { DesignationOrderModal } from '../components/DesignationOrderModal';
+import socket from '../../../common/services/socket';
 
 const Department = () => {
   const { user, hasPermission } = useAuth();
@@ -118,27 +119,22 @@ const Department = () => {
     fetchDepartments(search);
   }, [page, limit, sortBy, sortOrder, filterBranch, filterLocation]);
 
-  // SSE: real-time sync — when super-admin changes dept status, re-fetch silently
+  // Real-time sync via Socket.IO: re-fetch silently
   useEffect(() => {
-    const baseUrl = import.meta.env.VITE_API_URL || `${window.location.origin}/api`;
-    const connect = () => {
-      if (sseRef.current) sseRef.current.close();
-      const es = new EventSource(`${baseUrl}/display/stream`);
-      sseRef.current = es;
-      es.onmessage = (event) => {
-        if (event.data === '"update"' || event.data === 'update' || (typeof event.data === 'string' && event.data.includes('update'))) {
-          fetchDepartments(search);
-        }
-      };
-      es.onerror = () => {
-        es.close();
-        setTimeout(connect, 5000);
-      };
+    let debounceTimer = null;
+    const handleRefresh = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        fetchDepartments(search);
+      }, 400);
     };
-    connect();
-    return () => { if (sseRef.current) sseRef.current.close(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    socket.on('signage:refresh', handleRefresh);
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      socket.off('signage:refresh', handleRefresh);
+    };
+  }, [fetchDepartments, search]);
 
   const handleSearchChange = (e) => {
     const value = e.target.value;

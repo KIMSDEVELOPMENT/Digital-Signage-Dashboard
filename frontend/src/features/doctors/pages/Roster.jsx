@@ -22,6 +22,7 @@ import {
 import { TableSkeleton } from '../../../common/components/Skeleton';
 import Pagination from '../../../common/components/Pagination';
 import { toast } from 'react-hot-toast';
+import socket from '../../../common/services/socket';
 
 const Roster = () => {
   const { user, hasPermission, branches, branchLocations, getAssignedLocations } = useAuth();
@@ -186,49 +187,25 @@ const Roster = () => {
 
   // Real-time auto-refresh when any changes occur in the database / roster
   useEffect(() => {
-    const sseUrl = import.meta.env.VITE_API_URL 
-      ? `${import.meta.env.VITE_API_URL}/display/stream` 
-      : `${window.location.origin}/api/display/stream`;
-
-    let es = null;
-    let reconnectTimeout = null;
     let debounceTimer = null;
 
-    const connectSSE = () => {
-      try {
-        if (es) es.close();
-        es = new EventSource(sseUrl);
-
-        es.onmessage = (event) => {
-          const data = event.data;
-          if (data === 'update' || data === '"update"' || (typeof data === 'string' && data.includes('update'))) {
-            if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-              // Silently refresh if user is not actively editing an inline row
-              if (!editingRosterId) {
-                fetchRoster(true);
-                if (activeTab === 'archives') fetchArchives();
-              }
-            }, 500);
-          }
-        };
-
-        es.onerror = () => {
-          es.close();
-          if (reconnectTimeout) clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(connectSSE, 5000);
-        };
-      } catch (err) {
-        console.warn('[Roster SSE] Connection failed:', err);
-      }
+    const handleRefresh = (payload) => {
+      console.log('[Roster Socket.IO] Live update received:', payload);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        // Silently refresh if user is not actively editing an inline row
+        if (!editingRosterId) {
+          fetchRoster(true);
+          if (activeTab === 'archives') fetchArchives();
+        }
+      }, 400);
     };
 
-    connectSSE();
+    socket.on('signage:refresh', handleRefresh);
 
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (es) es.close();
+      socket.off('signage:refresh', handleRefresh);
     };
   }, [selectedBranch, selectedLocation, selectedDate, activeTab, editingRosterId]);
 

@@ -1,3 +1,5 @@
+import { emitSignageRefresh } from './socket.js';
+
 let clients = [];
 
 export function sseStream(req, res) {
@@ -26,7 +28,11 @@ export function sseStream(req, res) {
   });
 }
 
-export function notifyUpdate() {
+export function notifyUpdate(payload = {}) {
+  // 1. Emit real-time event to connected Socket.IO displays
+  emitSignageRefresh(payload);
+
+  // 2. Also emit to SSE subscribers for backwards compatibility
   clients.forEach((client) => {
     try {
       client.write('data: update\n\n');

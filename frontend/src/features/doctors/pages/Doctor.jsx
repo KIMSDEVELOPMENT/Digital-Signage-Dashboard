@@ -8,6 +8,7 @@ import Modal from '../../../common/components/Modal';
 import { toast } from 'react-hot-toast';
 import Cropper from 'react-easy-crop';
 import getCroppedImg from '../../../common/utils/cropImage';
+import socket from '../../../common/services/socket';
 
 const Doctor = () => {
   const { user, hasPermission } = useAuth();
@@ -157,47 +158,23 @@ const Doctor = () => {
 
   // Real-time auto-refresh when any changes occur in the database / doctors
   useEffect(() => {
-    const sseUrl = import.meta.env.VITE_API_URL 
-      ? `${import.meta.env.VITE_API_URL}/display/stream` 
-      : `${window.location.origin}/api/display/stream`;
-
-    let es = null;
-    let reconnectTimeout = null;
     let debounceTimer = null;
 
-    const connectSSE = () => {
-      try {
-        if (es) es.close();
-        es = new EventSource(sseUrl);
-
-        es.onmessage = (event) => {
-          const data = event.data;
-          if (data === 'update' || data === '"update"' || (typeof data === 'string' && data.includes('update'))) {
-            if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-              if (!isModalOpen && !cropModalOpen) {
-                fetchDoctors(search, true);
-              }
-            }, 500);
-          }
-        };
-
-        es.onerror = () => {
-          es.close();
-          if (reconnectTimeout) clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(connectSSE, 5000);
-        };
-      } catch (err) {
-        console.warn('[Doctor SSE] Connection failed:', err);
-      }
+    const handleRefresh = (payload) => {
+      console.log('[Doctor Socket.IO] Live update received:', payload);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (!isModalOpen && !cropModalOpen) {
+          fetchDoctors(search, true);
+        }
+      }, 400);
     };
 
-    connectSSE();
+    socket.on('signage:refresh', handleRefresh);
 
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (es) es.close();
+      socket.off('signage:refresh', handleRefresh);
     };
   }, [fetchDoctors, search, isModalOpen, cropModalOpen]);
 
