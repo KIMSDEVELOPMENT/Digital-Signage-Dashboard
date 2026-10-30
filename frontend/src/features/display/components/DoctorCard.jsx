@@ -1,7 +1,15 @@
 import React from 'react';
 import { Clock } from 'lucide-react';
 
-const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+const DAYS = [
+  { label: 'Mon', key: 'MON' },
+  { label: 'Tue', key: 'TUE' },
+  { label: 'Wed', key: 'WED' },
+  { label: 'Thu', key: 'THU' },
+  { label: 'Fri', key: 'FRI' },
+  { label: 'Sat', key: 'SAT' },
+  { label: 'Sun', key: 'SUN' },
+];
 
 const getFullPhotoUrl = (url) => {
   if (!url) return '';
@@ -13,16 +21,15 @@ const getFullPhotoUrl = (url) => {
  * DoctorCard
  *
  * Renders a single doctor row inside a department page.
- * Accepts `theme` so accent/border colors are branch-configurable.
- * The display_days parsing logic is preserved exactly from the original DisplayScreen.jsx.
+ * Keeps existing grid height and width, updated to the light teal/white card design.
  *
- * @param {{ doc: object, branch: string, location: string, theme: object }} props
+ * @param {{ doc: any, branch?: string, location?: string, theme?: any }} props
  */
 const DoctorCard = ({ doc, branch, location, theme }) => {
-  const accent = theme?.accentColor ?? '#fbbd61';
+  const accent = theme?.accentColor ?? '#005944';
   const bgPrimary = theme?.bgPrimary ?? '#004d40';
 
-  // Resolve which days are active for this doctor (branch/location-aware)
+  // Resolve which days are active for this doctor (branch/location-aware logic preserved 100%)
   let parsedDays = doc.display_days
     ? (typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days)
     : [];
@@ -37,75 +44,102 @@ const DoctorCard = ({ doc, branch, location, theme }) => {
     branchDays = locKeyMatch ? parsedDays[locKeyMatch] : (parsedDays[currentBranch] || []);
   }
 
-  const formattedName = doc.name
-    .replace(/^Dr\.?\s*/i, 'Dr. ')
-    .replace(/(Dr\.\s*)(.*)/i, (_, prefix, name) => prefix + name.toUpperCase());
+  // Format doctor name cleanly
+  const formattedName = (doc.name || '')
+    .trim()
+    .replace(/^Dr\.?\s*/i, 'Dr. ');
 
   return (
-    <div className="flex items-center bg-gradient-to-b from-white/20 to-transparent backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.1)] rounded-3xl border border-white/20 px-8 py-5 w-full">
-      {/* Left: Photo + Name */}
-      <div className="flex items-center gap-8 w-[45%]">
-        <div
-          className="w-36 h-36 rounded-full overflow-hidden bg-white shadow-md flex-shrink-0 border-[4px]"
-          style={{ borderColor: accent }}
-        >
-          {doc.photo_url ? (
-            <img
-              src={getFullPhotoUrl(doc.photo_url)}
-              alt={doc.name}
-              className="w-full h-full object-contain p-1 bg-white rounded-full"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${bgPrimary}1a` }}>
-              <span className="font-bold text-6xl" style={{ color: bgPrimary }}>
-                {doc.name.charAt(0)}
+    <div
+      className="relative flex items-center bg-white rounded-2xl xl:rounded-3xl border-2 shadow-md overflow-hidden w-full transition-all"
+      style={{ borderColor: accent }}
+    >
+      {/* Left solid accent color bar */}
+      <div
+        className="w-5 md:w-6 xl:w-7 2xl:w-8 self-stretch flex-shrink-0"
+        style={{ backgroundColor: accent }}
+      />
+
+      {/* Card Content: 3 horizontal columns (Left: Doctor Info, Center: Time Range, Right: Days Badges) */}
+      <div className="flex items-center justify-between flex-1 min-w-0 px-5 xl:px-7 py-2 xl:py-2.5 gap-4 xl:gap-8">
+        {/* Left Column: Photo + Name + Designation */}
+        <div className="flex items-center gap-6 xl:gap-8 min-w-0">
+          {/* Doctor Photo avatar frame (enlarged for prominent visibility) */}
+          <div
+            className="w-32 h-32 md:w-36 md:h-36 xl:w-40 xl:h-40 2xl:w-44 2xl:h-44 rounded-full overflow-hidden bg-white shadow-md flex-shrink-0 border-4 xl:border-[4.5px]"
+            style={{ borderColor: accent }}
+          >
+            {doc.photo_url ? (
+              <img
+                src={getFullPhotoUrl(doc.photo_url)}
+                alt=""
+                className="w-full h-full object-cover bg-white rounded-full"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextElementSibling) {
+                    e.currentTarget.nextElementSibling.style.display = 'flex';
+                  }
+                }}
+              />
+            ) : null}
+            <div
+              className="w-full h-full items-center justify-center bg-teal-50"
+              style={{ display: doc.photo_url ? 'none' : 'flex' }}
+            >
+              <span className="font-bold text-5xl xl:text-6xl 2xl:text-7xl" style={{ color: accent }}>
+                {doc.name ? doc.name.charAt(0) : 'D'}
               </span>
             </div>
-          )}
+          </div>
+
+          {/* Doctor Info */}
+          <div className="flex flex-col min-w-0 justify-center">
+            <h3
+              className="text-3xl xl:text-4xl font-extrabold tracking-normal truncate leading-tight"
+              style={{ color: bgPrimary, fontFamily: '"Times New Roman", Times, serif' }}
+            >
+              {formattedName}
+            </h3>
+            <div className="inline-flex items-center px-3.5 py-0.5 rounded-full border border-teal-300 bg-teal-50/90 shadow-xs mt-1.5 w-fit">
+              <span
+                className="text-sm xl:text-base font-bold uppercase tracking-wider"
+                style={{ color: accent, fontFamily: '"Times New Roman", Times, serif' }}
+              >
+                {doc.designation}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-col drop-shadow-md">
-          <h3
-            className="text-3xl font-bold text-white tracking-wide leading-tight"
-            style={{ fontFamily: '"Times New Roman", Times, serif' }}
+        {/* Center Column: Timing with Clock Icon */}
+        <div className="flex items-center gap-3 xl:gap-3.5 px-3 xl:px-6 shrink-0">
+          <Clock className="w-6 h-6 xl:w-7 xl:h-7 2xl:w-8 2xl:h-8 shrink-0" style={{ color: accent }} />
+          <span
+            className="text-lg xl:text-2xl 2xl:text-3xl font-extrabold tracking-wide whitespace-nowrap"
+            style={{ color: bgPrimary }}
           >
-            {formattedName}
-          </h3>
-          <p className="text-xl font-bold uppercase tracking-widest mt-1 leading-snug" style={{ color: accent }}>
-            {doc.designation}
-          </p>
+            {doc.timing || '09:00 AM - 05:00 PM'}
+          </span>
         </div>
-      </div>
 
-      {/* Center: Timing */}
-      <div
-        className="flex items-center justify-start gap-3 px-6 py-2 rounded-lg bg-transparent font-bold text-4xl w-[25%] -ml-12 drop-shadow-md"
-        style={{ color: accent, fontFamily: '"Times New Roman", Times, serif' }}
-      >
-        <Clock className="w-9 h-9 opacity-90" />
-        {doc.timing}
-      </div>
+        {/* Right Column: Days Badges */}
+        <div className="flex items-center justify-end gap-2 xl:gap-2.5 shrink-0">
+          {DAYS.map((dayItem) => {
+            const isActive = branchDays.some(
+              (d) => String(d).trim().toUpperCase() === dayItem.key || String(d).trim().toLowerCase() === dayItem.label.toLowerCase()
+            );
 
-      {/* Right: Days */}
-      <div className="flex justify-end gap-2 w-[30%]">
-        <div className="flex flex-wrap justify-end gap-1.5">
-          {DAYS.map(day => {
-            const isActive = branchDays.includes(day);
             return (
               <span
-                key={day}
-                className={`px-2.5 py-1.5 rounded-lg text-base border-2 uppercase tracking-wide transition-all duration-300 shadow-sm ${
-                  isActive ? 'font-extrabold' : 'bg-transparent text-white/40 font-semibold'
+                key={dayItem.key}
+                className={`w-14 xl:w-16 2xl:w-[70px] py-1.5 xl:py-2 text-center rounded-lg xl:rounded-xl text-sm xl:text-base 2xl:text-lg font-bold tracking-wide transition-all shadow-sm ${
+                  isActive
+                    ? 'text-white shadow'
+                    : 'bg-white text-slate-400 border xl:border-2 border-slate-300 font-semibold'
                 }`}
-                style={isActive ? {
-                  backgroundColor: accent,
-                  color: bgPrimary,
-                  borderColor: accent,
-                } : {
-                  borderColor: `${accent}66`,
-                }}
+                style={isActive ? { backgroundColor: accent, borderColor: accent } : {}}
               >
-                {day}
+                {dayItem.label}
               </span>
             );
           })}

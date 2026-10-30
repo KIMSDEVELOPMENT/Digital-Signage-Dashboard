@@ -6,44 +6,51 @@ const ICON_MAP = {
   default: PhoneCall,
 };
 
+const FooterItem = ({ label, number }) => {
+  const Icon = ICON_MAP[label] ?? ICON_MAP.default;
+  return (
+    <div className="flex items-center gap-3">
+      <Icon className="w-7 h-7 xl:w-8 xl:h-8 text-white" />
+      <span className="text-white font-bold">{label}: {number}</span>
+    </div>
+  );
+};
+
+const renderFooterItems = (footerNumbers) => (
+  <>
+    {(footerNumbers || []).map((item, idx) => (
+      <React.Fragment key={idx}>
+        <FooterItem label={item.label} number={item.number} />
+        <span className="text-white/70 font-light mx-8">|</span>
+      </React.Fragment>
+    ))}
+  </>
+);
+
 /**
  * DisplayFooter
  *
  * Scrolling marquee footer with emergency contact numbers.
- * Numbers are driven by `theme.footerNumbers` from the branch config — no hardcoded strings.
+ * Numbers are driven by `theme.footerNumbers` from the branch config.
+ * Styled with solid green/teal background and white typography.
  *
- * @param {{ theme: { footerNumbers: Array<{ label: string, number: string }> } }} props
+ * @param {{ theme?: any }} props
  */
 const DisplayFooter = ({ theme }) => {
-  const FooterItem = ({ label, number }) => {
-    const Icon = ICON_MAP[label] ?? ICON_MAP.default;
-    return (
-      <div className="flex items-center gap-3">
-        <Icon className="w-8 h-8 text-[#fbbd61]" fill="currentColor" />
-        <span>{label}: {number}</span>
-      </div>
-    );
-  };
-
-  const FooterContent = () => (
-    <>
-      {theme.footerNumbers.map((item, idx) => (
-        <React.Fragment key={idx}>
-          <FooterItem label={item.label} number={item.number} />
-          <span className="text-[#fbbd61]/70 font-light mx-8">|</span>
-        </React.Fragment>
-      ))}
-    </>
-  );
+  const footerBg = theme?.footerBg ?? theme?.accentColor ?? '#017754';
+  const footerNumbers = theme?.footerNumbers || [];
 
   return (
-    <footer className="bg-black/40 backdrop-blur-md border-t border-white/10 text-white py-5 shrink-0 shadow-[0_-4px_15px_rgba(0,0,0,0.2)] z-10 overflow-hidden flex items-center">
-      <div className="flex items-center w-max animate-marquee text-2xl font-bold tracking-wide whitespace-nowrap">
-        <FooterContent />
-        <FooterContent />
-        <FooterContent />
-        <FooterContent />
-        <FooterContent />
+    <footer
+      className="py-4 xl:py-5 shrink-0 shadow-lg z-10 overflow-hidden flex items-center border-t border-black/10"
+      style={{ backgroundColor: footerBg }}
+    >
+      <div className="flex items-center w-max animate-marquee text-xl xl:text-2xl font-bold tracking-wide whitespace-nowrap select-none">
+        {renderFooterItems(footerNumbers)}
+        {renderFooterItems(footerNumbers)}
+        {renderFooterItems(footerNumbers)}
+        {renderFooterItems(footerNumbers)}
+        {renderFooterItems(footerNumbers)}
       </div>
     </footer>
   );

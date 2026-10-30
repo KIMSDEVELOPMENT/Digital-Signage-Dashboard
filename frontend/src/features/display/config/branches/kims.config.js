@@ -35,9 +35,10 @@ export const kimsConfig = {
   displayName: 'KIMS Hospital',
 
   theme: {
-    accentColor: '#fbbd61',
+    accentColor: '#005944',
     bgPrimary: '#004d40',
     textPrimary: '#ffffff',
+    footerBg: '#017754',
     logo: kimsLogo,
     footerNumbers: [
       { label: 'AMBULANCE', number: '0674-7111333 / 7440 070010' },

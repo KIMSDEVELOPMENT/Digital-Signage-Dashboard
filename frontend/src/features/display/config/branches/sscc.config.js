@@ -34,9 +34,10 @@ export const ssccConfig = {
   displayName: 'KIMS Super Speciality Cancer Centre',
 
   theme: {
-    accentColor: '#fbbd61',
+    accentColor: '#005944',
     bgPrimary: '#004d40',
     textPrimary: '#ffffff',
+    footerBg: '#017754',
     logo: kssccLogo,
     footerNumbers: [
       { label: 'AMBULANCE', number: '0674-7111333 / 7440 070010' },
@@ -93,7 +94,7 @@ export const ssccConfig = {
 
     // Phase 2: Build location-specific pages
     const locParam = formatSlug(location);
-    let locationPages = [];
+    let locationPages;
     if (locParam === 'kss') {
       locationPages = buildPagesFromPlaylist(kssPlaylist, 'kss');
     } else if (locParam === 'kcc') {

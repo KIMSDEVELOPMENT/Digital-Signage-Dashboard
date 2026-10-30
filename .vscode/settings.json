@@ -1,0 +1,7 @@
+{
+  "javascript.implicitProjectConfig.checkJs": false,
+  "javascript.validate.enable": true,
+  "typescript.validate.enable": false,
+  "eslint.workingDirectories": [{ "pattern": "./frontend" }]
+}
+
