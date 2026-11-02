@@ -1,4 +1,6 @@
 import kssccLogo from '../../../../common/assets/ksscc-logo.png';
+import kssccEmblem from '../../../../common/assets/ksscc-emblem.png';
+import kssccText from '../../../../common/assets/ksscc-text.png';
 import api from '../../../../common/services/api';
 
 const formatSlug = (val) => {
@@ -39,6 +41,8 @@ export const ssccConfig = {
     textPrimary: '#ffffff',
     footerBg: '#017754',
     logo: kssccLogo,
+    emblem: kssccEmblem,
+    headerName: kssccText,
     footerNumbers: [
       { label: 'AMBULANCE', number: '0674-7111333 / 7440 070010' },
       { label: 'HELLO KIMS', number: '0674 2304400 / 7111000' },

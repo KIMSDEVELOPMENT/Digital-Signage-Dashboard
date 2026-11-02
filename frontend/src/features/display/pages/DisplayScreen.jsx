@@ -131,7 +131,7 @@ const DisplayScreen = () => {
       {/* Background image (only on content pages) */}
       {isContentPage && (
         <div
-          className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+          className="absolute inset-0 z-0 bg-cover bg-top bg-no-repeat"
           style={{ backgroundImage: `url(${bgImg})` }}
         />
       )}
@@ -139,8 +139,8 @@ const DisplayScreen = () => {
       {/* Header — uses config.theme.logo, no branch flags */}
       {isContentPage && <DisplayHeader theme={config.theme} />}
 
-      {/* Main content */}
-      <main className={`flex-1 flex flex-col z-10 overflow-hidden min-h-0 ${isContentPage ? 'px-8 xl:px-14 py-2 xl:py-4' : ''}`}>
+      {/* Main content — wider horizontal footprint so doctor card grid has ample length */}
+      <main className={`flex-1 flex flex-col z-10 overflow-hidden min-h-0 ${isContentPage ? 'px-1.5 md:px-2 xl:px-2.5 2xl:px-5 py-1.5 xl:py-3' : ''}`}>
 
         {/* Video page */}
         {currentPage?.isVideo && (
