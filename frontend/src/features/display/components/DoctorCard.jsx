@@ -99,94 +99,89 @@ const DoctorCard = ({ doc, branch, location, theme }) => {
         style={{ backgroundColor: accent }}
       />
 
-      {/* Card Content: Avatar on left, (Name + Clock/Time in Middle + Days on Right) in single horizontal line */}
-      <div className="flex items-center flex-1 min-w-0 px-3 md:px-4 xl:px-5 2xl:px-7 py-2 xl:py-2.5 gap-3 md:gap-4 xl:gap-5">
-        {/* Doctor Photo avatar frame */}
-        <div
-          className="w-26 h-26 md:w-30 md:h-30 xl:w-34 xl:h-34 2xl:w-42 2xl:h-42 rounded-full overflow-hidden bg-white/50 backdrop-blur-md shadow-md flex-shrink-0 border-3 xl:border-4"
-          style={{ borderColor: accent }}
-        >
-          {doc.photo_url ? (
-            <img
-              src={getFullPhotoUrl(doc.photo_url)}
-              alt=""
-              className="w-full h-full object-cover bg-white rounded-full"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                if (e.currentTarget.nextElementSibling) {
-                  e.currentTarget.nextElementSibling.style.display = 'flex';
-                }
-              }}
-            />
-          ) : null}
+      {/* Card Content: 3 distinct columns (Left: Avatar + Name & Designation Stack, Center: Consultation Timing, Right: Days Badges) */}
+      <div className="flex items-center justify-between flex-1 min-w-0 px-4 md:px-5 xl:px-6 2xl:px-8 py-2 xl:py-2.5 gap-2 md:gap-4 xl:gap-6">
+        {/* Left Column: Photo + (Name & Designation Stack) */}
+        <div className="flex items-center gap-3 md:gap-4 xl:gap-5 shrink-0 min-w-0">
+          {/* Doctor Photo avatar frame */}
           <div
-            className="w-full h-full items-center justify-center bg-teal-50/50 backdrop-blur-sm"
-            style={{ display: doc.photo_url ? 'none' : 'flex' }}
+            className="w-22 h-22 md:w-26 md:h-26 xl:w-28 xl:h-28 2xl:w-32 2xl:h-32 rounded-full overflow-hidden bg-white/50 backdrop-blur-md shadow-md flex-shrink-0 border-3 xl:border-4"
+            style={{ borderColor: accent }}
           >
-            <span className="font-bold text-5xl xl:text-6xl 2xl:text-7xl" style={{ color: accent }}>
-              {doc.name ? doc.name.charAt(0) : 'D'}
-            </span>
+            {doc.photo_url ? (
+              <img
+                src={getFullPhotoUrl(doc.photo_url)}
+                alt=""
+                className="w-full h-full object-cover bg-white rounded-full"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextElementSibling) {
+                    e.currentTarget.nextElementSibling.style.display = 'flex';
+                  }
+                }}
+              />
+            ) : null}
+            <div
+              className="w-full h-full items-center justify-center bg-teal-50/50 backdrop-blur-sm"
+              style={{ display: doc.photo_url ? 'none' : 'flex' }}
+            >
+              <span className="font-bold text-4xl xl:text-5xl 2xl:text-6xl" style={{ color: accent }}>
+                {doc.name ? doc.name.charAt(0) : 'D'}
+              </span>
+            </div>
+          </div>
+
+          {/* Doctor Name & Designation Stack */}
+          <div className="flex flex-col justify-center min-w-0">
+            <h3
+              className="text-xl md:text-2xl xl:text-3xl 2xl:text-[2rem] font-extrabold tracking-normal whitespace-nowrap leading-tight"
+              style={{ color: bgPrimary, fontFamily: '"Times New Roman", Times, serif' }}
+            >
+              {formattedName}
+            </h3>
+            <div
+              className="inline-flex items-center px-3.5 xl:px-4.5 py-1 xl:py-1.5 rounded-xl xl:rounded-2xl shadow-md border mt-1.5 xl:mt-2 w-fit transition-all"
+              style={{ backgroundColor: accent, borderColor: accent }}
+            >
+              <span className="text-xs sm:text-sm xl:text-sm 2xl:text-base font-extrabold uppercase tracking-wider text-white whitespace-nowrap">
+                {doc.designation}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Doctor Details + Timing + Days Container */}
-        <div className="flex flex-col justify-center flex-1 min-w-0">
-          {/* PRIMARY ROW: Name on Left, Clock & Time in Middle, Days Badges on Right */}
-          <div className="flex items-center justify-between w-full gap-3 xl:gap-5">
-            {/* 1. Doctor Name (Left) */}
-            <div className="flex items-center min-w-0">
-              <h3
-                className="text-2xl md:text-3xl xl:text-3xl 2xl:text-4xl font-extrabold tracking-normal whitespace-nowrap leading-tight shrink-0"
-                style={{ color: bgPrimary, fontFamily: '"Times New Roman", Times, serif' }}
-              >
-                {formattedName}
-              </h3>
-            </div>
+        {/* Center Column: Consultation Timing with Clinic Wall Clock */}
+        <div className="flex items-center justify-center gap-2 xl:gap-3 px-1 xl:px-3 shrink-0">
+          <ClinicWallClock className="w-6 h-6 md:w-7 md:h-7 xl:w-8 xl:h-8 shrink-0" style={{ color: accent }} />
+          <span
+            className="text-lg md:text-xl xl:text-2xl 2xl:text-3xl font-extrabold tracking-wide whitespace-nowrap"
+            style={{ color: bgPrimary }}
+          >
+            {doc.timing || '09:00 AM - 05:00 PM'}
+          </span>
+        </div>
 
-            {/* 2. Clock & Consultation Time (In the Middle) */}
-            <div className="flex items-center justify-center gap-2.5 xl:gap-3.5 px-2 xl:px-4 shrink-0 mx-auto">
-              <ClinicWallClock className="w-6 h-6 md:w-7 md:h-7 xl:w-8 xl:h-8 2xl:w-9 2xl:h-9 shrink-0" style={{ color: accent }} />
+        {/* Right Column: Days Badges */}
+        <div className="flex items-center justify-end gap-1 md:gap-1.5 xl:gap-2 shrink-0">
+          {DAYS.map((dayItem) => {
+            const isActive = branchDays.some(
+              (d) => String(d).trim().toUpperCase() === dayItem.key || String(d).trim().toLowerCase() === dayItem.label.toLowerCase()
+            );
+
+            return (
               <span
-                className="text-xl md:text-2xl xl:text-3xl 2xl:text-4xl font-extrabold tracking-wide whitespace-nowrap"
-                style={{ color: bgPrimary }}
+                key={dayItem.key}
+                className={`w-12 md:w-14 xl:w-16 2xl:w-[70px] py-1.5 xl:py-2 text-center rounded-xl xl:rounded-2xl text-base md:text-lg xl:text-xl 2xl:text-2xl font-extrabold tracking-wide transition-all ${
+                  isActive
+                    ? 'text-white shadow-md border'
+                    : 'bg-white/35 backdrop-blur-sm text-slate-700 border xl:border-2 border-white/75 shadow-xs font-semibold'
+                }`}
+                style={isActive ? { backgroundColor: accent, borderColor: accent } : {}}
               >
-                {doc.timing || '09:00 AM - 05:00 PM'}
+                {dayItem.label}
               </span>
-            </div>
-
-            {/* 3. Days Badges (Right) */}
-            <div className="flex items-center justify-end gap-1.5 md:gap-2 xl:gap-2.5 shrink-0 ml-auto">
-              {DAYS.map((dayItem) => {
-                const isActive = branchDays.some(
-                  (d) => String(d).trim().toUpperCase() === dayItem.key || String(d).trim().toLowerCase() === dayItem.label.toLowerCase()
-                );
-
-                return (
-                  <span
-                    key={dayItem.key}
-                    className={`w-14 md:w-[60px] xl:w-[66px] 2xl:w-[76px] py-1.5 xl:py-2 text-center rounded-xl xl:rounded-2xl text-lg xl:text-xl 2xl:text-2xl font-extrabold tracking-wide transition-all ${
-                      isActive
-                        ? 'text-white shadow-md border'
-                        : 'bg-white/35 backdrop-blur-sm text-slate-700 border xl:border-2 border-white/75 shadow-xs font-semibold'
-                    }`}
-                    style={isActive ? { backgroundColor: accent, borderColor: accent } : {}}
-                  >
-                    {dayItem.label}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* SUB ROW: Designation Pill directly below the Doctor Name */}
-          <div className="inline-flex items-center px-4.5 xl:px-5.5 py-1 xl:py-1.5 rounded-full border xl:border-2 border-teal-400/60 bg-white/55 backdrop-blur-sm shadow-xs mt-2 xl:mt-2.5 w-fit">
-            <span
-              className="text-base xl:text-lg 2xl:text-xl font-bold uppercase tracking-wider whitespace-nowrap"
-              style={{ color: accent, fontFamily: '"Times New Roman", Times, serif' }}
-            >
-              {doc.designation}
-            </span>
-          </div>
+            );
+          })}
         </div>
       </div>
     </div>
