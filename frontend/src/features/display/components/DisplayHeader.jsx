@@ -26,7 +26,7 @@ const DisplayHeader = ({ theme }) => {
             <img
               src={theme.headerName}
               alt="Hospital Header Name"
-              className="w-auto max-w-[950px] xl:max-w-[1250px] 2xl:max-w-[1450px] max-h-[130px] xl:max-h-[152px] 2xl:max-h-[168px] object-contain shrink-0"
+              className="w-auto max-w-[950px] xl:max-w-[1250px] 2xl:max-w-[1450px] max-h-[130px] xl:max-h-[152px] 2xl:max-h-[168px] object-contain shrink-0 translate-y-2.5 md:translate-y-3 xl:translate-y-3.5 2xl:translate-y-4"
             />
           </>
         ) : (
