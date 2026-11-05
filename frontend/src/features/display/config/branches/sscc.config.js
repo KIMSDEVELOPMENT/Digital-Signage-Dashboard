@@ -1,6 +1,5 @@
 import kssccLogo from '../../../../common/assets/ksscc-logo.png';
-import kssccEmblem from '../../../../common/assets/ksscc-emblem.png';
-import kssccText from '../../../../common/assets/ksscc-text.png';
+import bgSscc from '../../../../common/assets/bg-sscc.png';
 import api from '../../../../common/services/api';
 
 const formatSlug = (val) => {
@@ -36,13 +35,14 @@ export const ssccConfig = {
   displayName: 'KIMS Super Speciality Cancer Centre',
 
   theme: {
-    accentColor: '#005944',
+    variant: 'sscc',
+    bgImage: bgSscc,
+    accentColor: '#fbbd61',
     bgPrimary: '#004d40',
     textPrimary: '#ffffff',
-    footerBg: '#017754',
+    footerBg: 'rgba(0, 0, 0, 0.4)',
+    footerIconColor: '#fbbd61',
     logo: kssccLogo,
-    emblem: kssccEmblem,
-    headerName: kssccText,
     footerNumbers: [
       { label: 'AMBULANCE', number: '0674-7111333 / 7440 070010' },
       { label: 'HELLO KIMS', number: '0674 2304400 / 7111000' },

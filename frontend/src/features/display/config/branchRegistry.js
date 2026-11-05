@@ -1,4 +1,5 @@
 import { kimsConfig } from './branches/kims.config.js';
+import { pbmhConfig } from './branches/pbmh.config.js';
 import { ssccConfig } from './branches/sscc.config.js';
 import { kidsConfig } from './branches/kids.config.js';
 
@@ -24,7 +25,7 @@ const REGISTRY = {
 
   // KIMS — main hospital (default)
   kims: kimsConfig,
-  pbmh: kimsConfig, // PBMH uses the same simple logic as KIMS
+  pbmh: pbmhConfig, // PBMH exclusive light teal wave layout
 
   // KIDS / Dental — same playlist logic as KIMS, different logo
   kids: kidsConfig,

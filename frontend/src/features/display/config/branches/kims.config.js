@@ -1,5 +1,6 @@
 import kimsLogo from '../../../../common/assets/kims-logo.png';
 import kiitLogo from '../../../../common/assets/kiit-logo.png';
+import bgSscc from '../../../../common/assets/bg-sscc.png';
 import api from '../../../../common/services/api';
 
 const formatSlug = (val) => {
@@ -35,10 +36,13 @@ export const kimsConfig = {
   displayName: 'KIMS Hospital',
 
   theme: {
-    accentColor: '#005944',
+    variant: 'classic',
+    bgImage: bgSscc,
+    accentColor: '#fbbd61',
     bgPrimary: '#004d40',
     textPrimary: '#ffffff',
-    footerBg: '#017754',
+    footerBg: 'rgba(0, 0, 0, 0.4)',
+    footerIconColor: '#fbbd61',
     logo: kimsLogo,
     footerNumbers: [
       { label: 'AMBULANCE', number: '0674-7111333 / 7440 070010' },

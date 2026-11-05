@@ -3,46 +3,93 @@ import React from 'react';
 /**
  * DepartmentHeader
  *
- * Renders the clean solid teal pill banner for each department section.
- * Accepts `theme` so accent colors are branch-configurable.
+ * Renders the department section banner.
+ * - PBMH: Clean solid teal pill banner with white typography and side lines/dots.
+ * - SSCC / Classic: Amber/Gold pill banner with deep green typography and gold side lines/dots.
  *
  * @param {{ department?: string, theme?: any }} props
  */
 const DepartmentHeader = ({ department, theme }) => {
-  const accent = theme?.accentColor ?? '#005944';
+  const isPbmh = theme?.variant === 'pbmh';
+  const accent = theme?.accentColor ?? (isPbmh ? '#005944' : '#fbbd61');
+  const bgPrimary = theme?.bgPrimary ?? '#004d40';
 
-  return (
-    <div className="text-center mt-1 mb-3 xl:mb-3.5 w-auto max-w-fit mx-auto flex items-center justify-center gap-3 xl:gap-5 -translate-x-4 md:-translate-x-6 xl:-translate-x-8 2xl:-translate-x-10">
-      {/* Left decorative line ending with solid dot */}
-      <div className="w-20 sm:w-28 md:w-36 xl:w-48 2xl:w-56 shrink-0 flex items-center">
+  if (isPbmh) {
+    return (
+      <div className="text-center mt-1 mb-3 xl:mb-3.5 w-auto max-w-fit mx-auto flex items-center justify-center gap-3 xl:gap-5 -translate-x-4 md:-translate-x-6 xl:-translate-x-8 2xl:-translate-x-10">
+        {/* Left decorative line ending with solid dot */}
+        <div className="w-20 sm:w-28 md:w-36 xl:w-48 2xl:w-56 shrink-0 flex items-center">
+          <div
+            className="w-3 h-3 xl:w-3.5 xl:h-3.5 rounded-full shrink-0 mr-2 shadow-sm"
+            style={{ backgroundColor: accent }}
+          />
+          <div
+            className="w-full h-[2.5px] xl:h-[3px] rounded-full shadow-xs"
+            style={{ backgroundColor: accent }}
+          />
+        </div>
+
+        {/* Center Department Glass Pill */}
         <div
-          className="w-3 h-3 xl:w-3.5 xl:h-3.5 rounded-full shrink-0 mr-2 shadow-sm"
+          className="px-10 md:px-12 xl:px-14 py-2 xl:py-2.5 rounded-xl xl:rounded-2xl shadow-[0_8px_24px_rgba(0,89,68,0.25),inset_0_1px_1px_rgba(255,255,255,0.4)] border border-white/30 backdrop-blur-md inline-flex items-center justify-center transition-all shrink-0"
+          style={{ backgroundColor: `${accent}e0` }}
+        >
+          <h3 className="text-xl md:text-2xl xl:text-3xl font-extrabold tracking-wide text-white drop-shadow-sm whitespace-nowrap">
+            Department of {department}
+          </h3>
+        </div>
+
+        {/* Right decorative line ending with solid dot */}
+        <div className="w-20 sm:w-28 md:w-36 xl:w-48 2xl:w-56 shrink-0 flex items-center">
+          <div
+            className="w-full h-[2.5px] xl:h-[3px] rounded-full shadow-xs"
+            style={{ backgroundColor: accent }}
+          />
+          <div
+            className="w-3 h-3 xl:w-3.5 xl:h-3.5 rounded-full shrink-0 ml-2 shadow-sm"
+            style={{ backgroundColor: accent }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // SSCC / Classic style: Golden pill with dark green text and gold lines/dots
+  return (
+    <div className="text-center mb-6 xl:mb-8 w-full max-w-[85%] mx-auto flex items-center justify-center gap-4">
+      {/* Left decorative line ending with solid dot */}
+      <div className="flex-1 flex items-center">
+        <div
+          className="w-3 h-3 rounded-full shrink-0 mr-2"
           style={{ backgroundColor: accent }}
         />
         <div
-          className="w-full h-[2.5px] xl:h-[3px] rounded-full shadow-xs"
+          className="w-full h-[3px]"
           style={{ backgroundColor: accent }}
         />
       </div>
 
-      {/* Center Department Glass Pill */}
+      {/* Center Gold Pill */}
       <div
-        className="px-10 md:px-12 xl:px-14 py-2 xl:py-2.5 rounded-xl xl:rounded-2xl shadow-[0_8px_24px_rgba(0,89,68,0.25),inset_0_1px_1px_rgba(255,255,255,0.4)] border border-white/30 backdrop-blur-md inline-flex items-center justify-center transition-all shrink-0"
-        style={{ backgroundColor: `${accent}e0` }}
+        className="px-8 py-2 rounded-full shadow-md shrink-0 inline-flex items-center justify-center"
+        style={{ backgroundColor: accent }}
       >
-        <h3 className="text-xl md:text-2xl xl:text-3xl font-extrabold tracking-wide text-white drop-shadow-sm whitespace-nowrap">
+        <h3
+          className="text-2xl xl:text-[1.8rem] font-bold tracking-wide"
+          style={{ color: bgPrimary, fontFamily: '"Times New Roman", Times, serif' }}
+        >
           Department of {department}
         </h3>
       </div>
 
       {/* Right decorative line ending with solid dot */}
-      <div className="w-20 sm:w-28 md:w-36 xl:w-48 2xl:w-56 shrink-0 flex items-center">
+      <div className="flex-1 flex items-center">
         <div
-          className="w-full h-[2.5px] xl:h-[3px] rounded-full shadow-xs"
+          className="w-full h-[3px]"
           style={{ backgroundColor: accent }}
         />
         <div
-          className="w-3 h-3 xl:w-3.5 xl:h-3.5 rounded-full shrink-0 ml-2 shadow-sm"
+          className="w-3 h-3 rounded-full shrink-0 ml-2"
           style={{ backgroundColor: accent }}
         />
       </div>

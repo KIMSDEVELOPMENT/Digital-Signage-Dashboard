@@ -10,7 +10,7 @@ import DisplayFooter from '../components/DisplayFooter';
 import DepartmentHeader from '../components/DepartmentHeader';
 import DoctorCard from '../components/DoctorCard';
 import bannerImg from '../../../common/assets/Banner.png';
-import bgImg from '../../../common/assets/bg.png';
+import bgPbmh from '../../../common/assets/bg-pbmh.png';
 
 const formatLocationForUrl = (loc) => {
   if (!loc) return '';
@@ -33,6 +33,16 @@ const injectDisplayStyles = () => {
     }
     .animate-marquee { animation: marquee 45s linear infinite; }
     .animate-marquee:hover { animation-play-state: paused; }
+    @keyframes light-sweep {
+      0%   { transform: translateX(-50vw) skewX(-45deg) scaleX(1); opacity: 0; }
+      25%  { opacity: 0.5; transform: translateX(0vw) skewX(-40deg) scaleX(1.2); }
+      50%  { opacity: 0.2; transform: translateX(50vw) skewX(-45deg) scaleX(0.8); }
+      75%  { opacity: 0.5; transform: translateX(100vw) skewX(-50deg) scaleX(1.1); }
+      100% { transform: translateX(150vw) skewX(-45deg) scaleX(1); opacity: 0; }
+    }
+    .animate-light-1 { animation: light-sweep 8s linear infinite; }
+    .animate-light-2 { animation: light-sweep 12s linear infinite 3s; }
+    .animate-light-3 { animation: light-sweep 16s linear infinite 6s; }
   `;
   if (!document.getElementById('display-screen-styles')) {
     document.head.appendChild(style);
@@ -130,17 +140,36 @@ const DisplayScreen = () => {
 
       {/* Background image (only on content pages) */}
       {isContentPage && (
-        <div
-          className="absolute inset-0 z-0 bg-cover bg-top bg-no-repeat"
-          style={{ backgroundImage: `url(${bgImg})` }}
-        />
+        <>
+          <div
+            className={`absolute inset-0 z-0 bg-no-repeat ${
+              config.theme?.variant === 'pbmh' ? 'bg-cover bg-top' : 'bg-cover bg-center'
+            }`}
+            style={{ backgroundImage: `url(${config.theme?.bgImage || bgPbmh})` }}
+          />
+          {config.theme?.variant === 'sscc' && (
+            <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none mix-blend-screen">
+              <div className="absolute top-0 -bottom-32 w-[30vw] bg-gradient-to-r from-transparent via-white to-transparent opacity-0 blur-[50px] animate-light-1" />
+              <div className="absolute -top-32 bottom-0 w-[40vw] bg-gradient-to-r from-transparent via-white to-transparent opacity-0 blur-[60px] animate-light-2" />
+              <div className="absolute top-1/4 -bottom-1/4 w-[25vw] bg-gradient-to-r from-transparent via-white to-transparent opacity-0 blur-[40px] animate-light-3" />
+            </div>
+          )}
+        </>
       )}
 
       {/* Header — uses config.theme.logo, no branch flags */}
       {isContentPage && <DisplayHeader theme={config.theme} />}
 
-      {/* Main content — wider horizontal footprint so doctor card grid has ample length */}
-      <main className={`flex-1 flex flex-col z-10 overflow-hidden min-h-0 ${isContentPage ? 'px-1.5 md:px-2 xl:px-2.5 2xl:px-5 py-1.5 xl:py-3' : ''}`}>
+      {/* Main content */}
+      <main
+        className={`flex-1 flex flex-col z-10 overflow-hidden min-h-0 ${
+          isContentPage
+            ? config.theme?.variant === 'pbmh'
+              ? 'px-1.5 md:px-2 xl:px-2.5 2xl:px-5 py-1.5 xl:py-3'
+              : 'px-6 md:px-8 xl:px-14 py-2 xl:py-4'
+            : ''
+        }`}
+      >
 
         {/* Video page */}
         {currentPage?.isVideo && (

@@ -1,7 +1,8 @@
 import React from 'react';
+import { Clock } from 'lucide-react';
 
 /**
- * ClinicWallClock — Option 2: Clinic wall clock with 12-hour tick marks and hands set to 9:00.
+ * ClinicWallClock — 12-hour wall clock tick SVG icon used exclusively in PBMH layout.
  */
 const ClinicWallClock = ({ className, style }) => (
   <svg
@@ -41,7 +42,7 @@ const ClinicWallClock = ({ className, style }) => (
   </svg>
 );
 
-const DAYS = [
+const PBMH_DAYS = [
   { label: 'Mon', key: 'MON' },
   { label: 'Tue', key: 'TUE' },
   { label: 'Wed', key: 'WED' },
@@ -51,6 +52,8 @@ const DAYS = [
   { label: 'Sun', key: 'SUN' },
 ];
 
+const SSCC_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
 const getFullPhotoUrl = (url) => {
   if (!url) return '';
   const baseMediaUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : window.location.origin;
@@ -58,48 +61,20 @@ const getFullPhotoUrl = (url) => {
 };
 
 /**
- * DoctorCard
- *
- * Renders a single doctor row inside a department page.
- * Keeps existing grid height and width, updated to the light teal/white card design.
- *
- * @param {{ doc: any, branch?: string, location?: string, theme?: any }} props
+ * DoctorCardPbmh — Exclusive Light Teal/White Wave Design (Image 1)
  */
-const DoctorCard = ({ doc, branch, location, theme }) => {
-  const accent = theme?.accentColor ?? '#005944';
-  const bgPrimary = theme?.bgPrimary ?? '#004d40';
-
-  // Resolve which days are active for this doctor (branch/location-aware logic preserved 100%)
-  let parsedDays = doc.display_days
-    ? (typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days)
-    : [];
-
-  let branchDays = [];
-  if (Array.isArray(parsedDays)) {
-    branchDays = parsedDays;
-  } else if (parsedDays && typeof parsedDays === 'object') {
-    const currentBranch = branch ? branch.toUpperCase() : 'SSCC';
-    const currentLoc = location || '';
-    const locKeyMatch = Object.keys(parsedDays).find(k => k.toLowerCase() === currentLoc.toLowerCase());
-    branchDays = locKeyMatch ? parsedDays[locKeyMatch] : (parsedDays[currentBranch] || []);
-  }
-
-  // Format doctor name cleanly
-  const formattedName = (doc.name || '')
-    .trim()
-    .replace(/^Dr\.?\s*/i, 'Dr. ');
+const DoctorCardPbmh = ({ doc, branchDays, accent, bgPrimary }) => {
+  const formattedName = (doc.name || '').trim().replace(/^Dr\.?\s*/i, 'Dr. ');
 
   return (
-    <div
-      className="relative flex items-center bg-gradient-to-r from-white/55 via-white/40 to-white/35 backdrop-blur-lg rounded-2xl xl:rounded-3xl border-2 border-white/80 shadow-[0_8px_32px_0_rgba(0,89,68,0.14),inset_0_1px_2px_rgba(255,255,255,0.95)] overflow-hidden w-full transition-all"
-    >
+    <div className="relative flex items-center bg-gradient-to-r from-white/55 via-white/40 to-white/35 backdrop-blur-lg rounded-2xl xl:rounded-3xl border-2 border-white/80 shadow-[0_8px_32px_0_rgba(0,89,68,0.14),inset_0_1px_2px_rgba(255,255,255,0.95)] overflow-hidden w-full transition-all">
       {/* Left solid accent color bar */}
       <div
         className="w-3 md:w-3.5 xl:w-4 2xl:w-5 self-stretch flex-shrink-0 opacity-80 backdrop-blur-md"
         style={{ backgroundColor: accent }}
       />
 
-      {/* Card Content: 3 distinct columns (Left: Avatar + Name & Designation Stack, Center: Consultation Timing, Right: Days Badges) */}
+      {/* Card Content: 3 distinct columns */}
       <div className="flex items-center justify-between flex-1 min-w-0 px-4 md:px-5 xl:px-6 2xl:px-8 py-2 xl:py-2.5 gap-2 md:gap-4 xl:gap-6">
         {/* Left Column: Photo + (Name & Designation Stack) */}
         <div className="flex items-center gap-3 md:gap-4 xl:gap-5 shrink-0 min-w-0">
@@ -163,7 +138,7 @@ const DoctorCard = ({ doc, branch, location, theme }) => {
 
         {/* Right Column: Days Badges */}
         <div className="flex items-center justify-end gap-1 md:gap-1.5 xl:gap-2 shrink-0">
-          {DAYS.map((dayItem) => {
+          {PBMH_DAYS.map((dayItem) => {
             const isActive = branchDays.some(
               (d) => String(d).trim().toUpperCase() === dayItem.key || String(d).trim().toLowerCase() === dayItem.label.toLowerCase()
             );
@@ -185,6 +160,157 @@ const DoctorCard = ({ doc, branch, location, theme }) => {
         </div>
       </div>
     </div>
+  );
+};
+
+/**
+ * DoctorCardSscc — Exclusive Deep Emerald Green & Gold Design (Image 2)
+ */
+const DoctorCardSscc = ({ doc, branchDays, accent, bgPrimary }) => {
+  const formattedName = (doc.name || '')
+    .replace(/^Dr\.?\s*/i, 'Dr. ')
+    .replace(/(Dr\.\s*)(.*)/i, (_, prefix, name) => prefix + name.toUpperCase());
+
+  return (
+    <div className="flex items-center bg-gradient-to-b from-white/20 to-transparent backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.1)] rounded-3xl border border-white/20 px-8 py-4 xl:py-5 w-full">
+      {/* Left: Photo + Name & Designation */}
+      <div className="flex items-center gap-6 xl:gap-8 w-[45%]">
+        <div
+          className="w-28 h-28 xl:w-36 xl:h-36 rounded-full overflow-hidden bg-white shadow-md flex-shrink-0 border-[4px]"
+          style={{ borderColor: accent }}
+        >
+          {doc.photo_url ? (
+            <img
+              src={getFullPhotoUrl(doc.photo_url)}
+              alt={doc.name}
+              className="w-full h-full object-contain p-1 bg-white rounded-full"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                if (e.currentTarget.nextElementSibling) {
+                  e.currentTarget.nextElementSibling.style.display = 'flex';
+                }
+              }}
+            />
+          ) : null}
+          <div
+            className="w-full h-full items-center justify-center"
+            style={{
+              backgroundColor: `${bgPrimary}1a`,
+              display: doc.photo_url ? 'none' : 'flex',
+            }}
+          >
+            <span className="font-bold text-5xl xl:text-6xl" style={{ color: bgPrimary }}>
+              {doc.name ? doc.name.charAt(0) : 'D'}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col drop-shadow-md min-w-0">
+          <h3
+            className="text-2xl xl:text-3xl font-bold text-white tracking-wide leading-tight whitespace-nowrap"
+            style={{ fontFamily: '"Times New Roman", Times, serif' }}
+          >
+            {formattedName}
+          </h3>
+          <p
+            className="text-lg xl:text-xl font-bold uppercase tracking-widest mt-1 leading-snug whitespace-nowrap"
+            style={{ color: accent }}
+          >
+            {doc.designation}
+          </p>
+        </div>
+      </div>
+
+      {/* Center: Timing with Gold Lucide Clock */}
+      <div
+        className="flex items-center justify-start gap-3 px-6 py-2 bg-transparent font-bold text-3xl xl:text-4xl w-[25%] -ml-6 drop-shadow-md"
+        style={{ color: accent, fontFamily: '"Times New Roman", Times, serif' }}
+      >
+        <Clock className="w-8 h-8 xl:w-9 xl:h-9 opacity-90 shrink-0" />
+        <span className="whitespace-nowrap">{doc.timing || '09:00 AM - 05:00 PM'}</span>
+      </div>
+
+      {/* Right: Days */}
+      <div className="flex justify-end gap-2 w-[30%]">
+        <div className="flex flex-wrap justify-end gap-1.5">
+          {SSCC_DAYS.map((day) => {
+            const isActive = branchDays.some(
+              (d) => String(d).trim().toUpperCase() === day
+            );
+
+            return (
+              <span
+                key={day}
+                className={`px-2.5 py-1.5 rounded-lg text-sm xl:text-base border-2 uppercase tracking-wide transition-all duration-300 shadow-sm ${
+                  isActive ? 'font-extrabold' : 'bg-transparent text-white/40 font-semibold'
+                }`}
+                style={
+                  isActive
+                    ? {
+                        backgroundColor: accent,
+                        color: bgPrimary,
+                        borderColor: accent,
+                      }
+                    : {
+                        borderColor: `${accent}66`,
+                      }
+                }
+              >
+                {day}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * DoctorCard
+ *
+ * Dispatches to DoctorCardPbmh or DoctorCardSscc based on theme.variant.
+ *
+ * @param {{ doc: any, branch?: string, location?: string, theme?: any }} props
+ */
+const DoctorCard = ({ doc, branch, location, theme }) => {
+  const isPbmh = theme?.variant === 'pbmh';
+  const accent = theme?.accentColor ?? (isPbmh ? '#005944' : '#fbbd61');
+  const bgPrimary = theme?.bgPrimary ?? '#004d40';
+
+  // Resolve which days are active for this doctor (branch/location-aware logic preserved 100%)
+  let parsedDays = doc.display_days
+    ? (typeof doc.display_days === 'string' ? JSON.parse(doc.display_days) : doc.display_days)
+    : [];
+
+  let branchDays = [];
+  if (Array.isArray(parsedDays)) {
+    branchDays = parsedDays;
+  } else if (parsedDays && typeof parsedDays === 'object') {
+    const currentBranch = branch ? branch.toUpperCase() : 'SSCC';
+    const currentLoc = location || '';
+    const locKeyMatch = Object.keys(parsedDays).find((k) => k.toLowerCase() === currentLoc.toLowerCase());
+    branchDays = locKeyMatch ? parsedDays[locKeyMatch] : (parsedDays[currentBranch] || []);
+  }
+
+  if (isPbmh) {
+    return (
+      <DoctorCardPbmh
+        doc={doc}
+        branchDays={branchDays}
+        accent={accent}
+        bgPrimary={bgPrimary}
+      />
+    );
+  }
+
+  return (
+    <DoctorCardSscc
+      doc={doc}
+      branchDays={branchDays}
+      accent={accent}
+      bgPrimary={bgPrimary}
+    />
   );
 };
 
