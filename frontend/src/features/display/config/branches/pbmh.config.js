@@ -1,6 +1,6 @@
 import kimsLogo from '../../../../common/assets/kims-logo.png';
 import kssccEmblem from '../../../../common/assets/ksscc-emblem.png';
-import kssccText from '../../../../common/assets/ksscc-text.png';
+import pbmhText from '../../../../common/assets/pbmh-text.png';
 import bgPbmh from '../../../../common/assets/bg-pbmh.png';
 import api from '../../../../common/services/api';
 
@@ -46,7 +46,7 @@ export const pbmhConfig = {
     footerIconColor: '#ffffff',
     logo: kimsLogo,
     emblem: kssccEmblem,
-    headerName: kssccText,
+    headerName: pbmhText,
     footerNumbers: [
       { label: 'AMBULANCE', number: '0674-7111333 / 7440 070010' },
       { label: 'HELLO KIMS', number: '0674 2304400 / 7111000' },
