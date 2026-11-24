@@ -1,1 +1,1 @@
-export { uploadVideo, getVideos, deleteVideo } from '../../controllers/videoController.js';
+export { uploadVideo, getVideos, deleteVideo, updateVideo } from '../../controllers/videoController.js';

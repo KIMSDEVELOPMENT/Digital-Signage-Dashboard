@@ -174,3 +174,127 @@ export async function deleteVideo(req, res) {
     return res.status(500).json({ message: 'Internal server error.' });
   }
 }
+
+export async function updateVideo(req, res) {
+  const { id } = req.params;
+  const { branch_id, location_id, title, play_order } = req.body;
+
+  try {
+    const video = await videoRepository.findById(id);
+    if (!video) {
+      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(404).json({ message: 'Video not found.' });
+    }
+
+    if (!branch_id || !location_id) {
+      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'Branch and Location selections are required.' });
+    }
+
+    if (!title) {
+      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'Video title is required.' });
+    }
+
+    // 1. Check if branch and location exist
+    const branch = await branchRepository.findById(branch_id);
+    const location = await locationRepository.findById(location_id);
+    if (!branch || !location) {
+      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ message: 'Invalid branch or location.' });
+    }
+
+    // 2. Validate permissions for normal admin
+    if (req.user && req.user.role === 'normal_admin') {
+      const hasCurrentAccess = await userRepository.hasLocationAccess(req.user.id, video.branch_name, video.location_name);
+      if (!hasCurrentAccess) {
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        return res.status(403).json({ message: 'You do not have permission to edit this video.' });
+      }
+
+      const hasTargetAccess = await userRepository.hasLocationAccess(req.user.id, branch.name, location.name);
+      if (!hasTargetAccess) {
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        return res.status(403).json({ message: 'You do not have permission to move videos to this block.' });
+      }
+    }
+
+    const updateData = {
+      branch_id,
+      location_id,
+      title,
+      play_order: play_order ? parseInt(play_order) : 1
+    };
+
+    // 3. Handle new video file if provided
+    if (req.file) {
+      let duration;
+      try {
+        duration = await getVideoDurationInSeconds(req.file.path);
+      } catch (err) {
+        console.error('Error getting video duration:', err);
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        return res.status(400).json({ message: 'Failed to process video duration. Ensure it is a valid video file.' });
+      }
+
+      if (duration > 1200) {
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        return res.status(400).json({ message: 'Video duration exceeds the 20-minute maximum limit.' });
+      }
+
+      const originalPath = req.file.path;
+      const outputFilename = `compressed-${req.file.filename}.mp4`;
+      const outputPath = path.join(path.dirname(originalPath), outputFilename);
+
+      try {
+        await execFileAsync(ffmpegPath, [
+          '-i', originalPath,
+          '-c:v', 'libx264',
+          '-preset', 'ultrafast',
+          '-crf', '28',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-movflags', '+faststart',
+          outputPath
+        ]);
+
+        const stats = fs.statSync(outputPath);
+        req.file.size = stats.size;
+        req.file.filename = outputFilename;
+
+        if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
+      } catch (err) {
+        console.error('FFmpeg compression error:', err);
+        if (fs.existsSync(originalPath)) fs.unlinkSync(originalPath);
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+        return res.status(500).json({ message: 'Failed to compress video. Make sure it is a valid video file.' });
+      }
+
+      // Delete old video file
+      const oldFilePath = path.join(process.cwd(), video.file_path);
+      if (fs.existsSync(oldFilePath)) {
+        try {
+          fs.unlinkSync(oldFilePath);
+        } catch (e) {
+          console.warn('Could not delete old video file:', e.message);
+        }
+      }
+
+      updateData.file_path = `/uploads/videos/${req.file.filename}`;
+      updateData.original_name = req.file.originalname;
+      updateData.file_size = req.file.size;
+      updateData.duration = duration;
+    }
+
+    // 4. Update database
+    await videoRepository.updateVideo(id, updateData);
+
+    notifyUpdate();
+
+    return res.status(200).json({ message: 'Video updated successfully.' });
+  } catch (error) {
+    console.error('Update video error:', error);
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+}

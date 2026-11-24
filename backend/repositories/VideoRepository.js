@@ -56,6 +56,26 @@ class VideoRepository {
     const pool = getPool();
     await pool.query('DELETE FROM videos WHERE id = ?', [id]);
   }
+
+  async updateVideo(id, data) {
+    const pool = getPool();
+    const fields = [];
+    const values = [];
+
+    if (data.branch_id !== undefined) { fields.push('branch_id = ?'); values.push(data.branch_id); }
+    if (data.location_id !== undefined) { fields.push('location_id = ?'); values.push(data.location_id); }
+    if (data.title !== undefined) { fields.push('title = ?'); values.push(data.title); }
+    if (data.play_order !== undefined) { fields.push('play_order = ?'); values.push(data.play_order); }
+    if (data.file_path !== undefined) { fields.push('file_path = ?'); values.push(data.file_path); }
+    if (data.original_name !== undefined) { fields.push('original_name = ?'); values.push(data.original_name); }
+    if (data.file_size !== undefined) { fields.push('file_size = ?'); values.push(data.file_size); }
+    if (data.duration !== undefined) { fields.push('duration = ?'); values.push(data.duration); }
+
+    if (fields.length === 0) return;
+    values.push(id);
+
+    await pool.query(`UPDATE videos SET ${fields.join(', ')} WHERE id = ?`, values);
+  }
 }
 
 export default new VideoRepository();

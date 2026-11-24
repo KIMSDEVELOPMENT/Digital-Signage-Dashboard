@@ -110,18 +110,24 @@ export const ssccConfig = {
       ];
     }
 
-    // Phase 3: Aggregate videos for SSCC (across both KSS and KCC)
-    const videoMap = new Map();
-    const rawVideos = [
-      ...(kssPlaylist.videos || []),
-      ...(kccPlaylist.videos || []),
-    ];
-    rawVideos.forEach(v => {
-      if (v?.url && !videoMap.has(v.url)) {
-        videoMap.set(v.url, v);
-      }
-    });
-    const allBranchVideos = Array.from(videoMap.values()).sort(
+    // Phase 3: Scope videos strictly to the screen's location (KSS or KCC)
+    let locationVideos = [];
+    if (locParam === 'kss') {
+      locationVideos = kssPlaylist.videos || [];
+    } else if (locParam === 'kcc') {
+      locationVideos = kccPlaylist.videos || [];
+    } else {
+      // Fallback if neither specific location is targeted
+      const videoMap = new Map();
+      [...(kssPlaylist.videos || []), ...(kccPlaylist.videos || [])].forEach(v => {
+        if (v?.url && !videoMap.has(v.url)) {
+          videoMap.set(v.url, v);
+        }
+      });
+      locationVideos = Array.from(videoMap.values());
+    }
+
+    const allBranchVideos = [...locationVideos].sort(
       (a, b) => (Number(a.playOrder) || 1) - (Number(b.playOrder) || 1)
     );
 

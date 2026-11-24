@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Video, UploadCloud, Trash2, AlertCircle, X, Plus } from 'lucide-react';
+import { Video, UploadCloud, Trash2, AlertCircle, X, Plus, Pencil } from 'lucide-react';
 import api from '../../../common/services/api';
 import { useAuth } from '../../../app/context/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -17,6 +17,7 @@ const VideoManagement = () => {
   const [success, setSuccess] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingVideo, setEditingVideo] = useState(null);
   const [title, setTitle] = useState('');
   const [playOrder, setPlayOrder] = useState(1);
   
@@ -24,19 +25,18 @@ const VideoManagement = () => {
   const [selectedLocation, setSelectedLocation] = useState('');
   const [availableLocations, setAvailableLocations] = useState([]);
 
-  // Auto-assign branch and location for normal admins
+  // Auto-assign branch and location for normal admins when not editing
   useEffect(() => {
-    if (user && user.role !== 'super_admin' && assignedLocs && assignedLocs.length > 0) {
+    if (user && user.role !== 'super_admin' && assignedLocs && assignedLocs.length > 0 && !editingVideo) {
       setSelectedBranch(assignedLocs[0].branch);
       setSelectedLocation(assignedLocs[0].location);
     }
-  }, [user, assignedLocs]);
+  }, [user, assignedLocs, editingVideo]);
 
   useEffect(() => {
     if (user?.role === 'super_admin') {
       if (selectedBranch) {
         setAvailableLocations(branchLocations[selectedBranch] || []);
-        setSelectedLocation('');
       } else {
         setAvailableLocations([]);
         setSelectedLocation('');
@@ -75,19 +75,44 @@ const VideoManagement = () => {
   };
 
   const resetForm = () => {
+    setEditingVideo(null);
     setFile(null);
     setTitle('');
+    setPlayOrder(1);
     if (user?.role === 'super_admin') {
       setSelectedBranch('');
       setSelectedLocation('');
+      setAvailableLocations([]);
+    } else if (assignedLocs && assignedLocs.length > 0) {
+      setSelectedBranch(assignedLocs[0].branch);
+      setSelectedLocation(assignedLocs[0].location);
     }
     setError('');
   };
 
-  const handleUpload = async (e) => {
+  const handleOpenEdit = (video) => {
+    setEditingVideo(video);
+    setTitle(video.title || video.original_name || '');
+    setPlayOrder(video.play_order || 1);
+    setSelectedBranch(video.branch_name || '');
+    if (branchLocations && video.branch_name) {
+      setAvailableLocations(branchLocations[video.branch_name] || []);
+    }
+    setSelectedLocation(video.location_name || '');
+    setFile(null);
+    setError('');
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!file || !selectedBranch || !selectedLocation || !title) {
-      setError('Please fill all required fields and select a video file.');
+    if (!selectedBranch || !selectedLocation || !title) {
+      setError('Please fill all required fields.');
+      return;
+    }
+
+    if (!editingVideo && !file) {
+      setError('Please select a video file.');
       return;
     }
 
@@ -109,23 +134,36 @@ const VideoManagement = () => {
       }
 
       const formData = new FormData();
-      formData.append('video', file);
+      if (file) {
+        formData.append('video', file);
+      }
       formData.append('branch_id', branchObj.id);
       formData.append('location_id', locObj.id);
       formData.append('title', title);
       formData.append('play_order', playOrder);
 
-      await api.post('/videos/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      if (editingVideo) {
+        await api.put(`/videos/${editingVideo.id}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        toast.success('Video updated successfully.');
+        setSuccess('Video updated successfully.');
+      } else {
+        await api.post('/videos/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        toast.success('Video uploaded successfully.');
+        setSuccess('Video uploaded successfully.');
+      }
 
-      setSuccess('Video uploaded successfully.');
       setIsModalOpen(false);
       resetForm();
       fetchVideos();
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.message || 'Failed to upload video.');
+      const errMsg = err.response?.data?.message || err.message || (editingVideo ? 'Failed to update video.' : 'Failed to upload video.');
+      setError(errMsg);
+      toast.error(errMsg);
     } finally {
       setUploading(false);
     }
@@ -135,11 +173,14 @@ const VideoManagement = () => {
     if (!window.confirm('Are you sure you want to delete this video?')) return;
     try {
       await api.delete(`/videos/${id}`);
+      toast.success('Video deleted successfully.');
       setSuccess('Video deleted successfully.');
       fetchVideos();
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.message || 'Failed to delete video.');
+      const errMsg = err.response?.data?.message || 'Failed to delete video.';
+      setError(errMsg);
+      toast.error(errMsg);
     }
   };
 
@@ -218,11 +259,9 @@ const VideoManagement = () => {
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="font-semibold text-slate-200">{video.title || video.original_name}</span>
-                        {isSuperAdmin && (
-                          <span className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">
-                            {video.branch_name} • {video.location_name}
-                          </span>
-                        )}
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wider mt-1">
+                          {video.branch_name} • {video.location_name}
+                        </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 font-mono text-sm text-slate-300">
@@ -238,13 +277,22 @@ const VideoManagement = () => {
                       {new Date(video.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => handleDelete(video.id)}
-                        className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer"
-                        title="Delete Video"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleOpenEdit(video)}
+                          className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-emerald-400/10 rounded-lg transition-colors cursor-pointer"
+                          title="Edit Video"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(video.id)}
+                          className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer"
+                          title="Delete Video"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -259,7 +307,9 @@ const VideoManagement = () => {
           <div className="w-full max-w-lg bg-[#0f1524] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
             
             <div className="flex justify-between items-center p-6 border-b border-slate-800/80 bg-[#0f1524]">
-              <h2 className="text-xl font-bold text-white tracking-wide">Upload Signage Video</h2>
+              <h2 className="text-xl font-bold text-white tracking-wide">
+                {editingVideo ? 'Edit Signage Video' : 'Upload Signage Video'}
+              </h2>
               <button 
                 onClick={() => { setIsModalOpen(false); resetForm(); }}
                 className="text-slate-400 hover:text-white p-1 rounded-md transition-colors"
@@ -296,7 +346,7 @@ const VideoManagement = () => {
                 />
               </div>
 
-              {isSuperAdmin && (
+              {isSuperAdmin ? (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">Branch *</label>
@@ -326,16 +376,53 @@ const VideoManagement = () => {
                     </select>
                   </div>
                 </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">Branch *</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={selectedBranch}
+                      className="w-full px-4 py-3 rounded-xl text-sm bg-[#0b1120] border border-slate-800 text-slate-400 cursor-not-allowed opacity-75 shadow-inner"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">Block / Location *</label>
+                    {assignedLocs && assignedLocs.length > 1 ? (
+                      <select
+                        value={selectedLocation}
+                        onChange={(e) => setSelectedLocation(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl text-sm bg-[#0b1120] border border-slate-800 focus:border-emerald-500 focus:outline-none text-slate-200 shadow-inner"
+                      >
+                        {assignedLocs.map(al => (
+                          <option key={al.location} value={al.location}>{al.location}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        disabled
+                        value={selectedLocation}
+                        className="w-full px-4 py-3 rounded-xl text-sm bg-[#0b1120] border border-slate-800 text-slate-400 cursor-not-allowed opacity-75 shadow-inner"
+                      />
+                    )}
+                  </div>
+                </div>
               )}
 
               <div className="space-y-2">
                 <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
-                  Select Video File *
+                  {editingVideo ? 'Replace Video File (Optional)' : 'Select Video File *'}
                 </label>
                 <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-700/80 hover:border-emerald-500/50 rounded-2xl bg-[#0b1120] cursor-pointer group transition-all duration-200">
                   <UploadCloud className="w-8 h-8 text-slate-500 group-hover:text-emerald-400 transition-colors mb-3" />
                   <p className="text-sm font-semibold text-slate-200 text-center">
-                    {file ? file.name : 'Select video file...'}
+                    {file 
+                      ? file.name 
+                      : editingVideo 
+                        ? `Current: ${editingVideo.original_name || 'Existing file'} (Click to replace)` 
+                        : 'Select video file...'}
                   </p>
                   <p className="text-[10px] text-slate-500 text-center mt-2 font-medium tracking-wide">
                     Max 1 GB & 20 minutes (mp4, webm, mov, mkv)
@@ -347,6 +434,11 @@ const VideoManagement = () => {
                     className="hidden"
                   />
                 </label>
+                {editingVideo && !file && (
+                  <p className="text-xs text-slate-400 italic">
+                    * Leave untouched if you want to keep the current video file.
+                  </p>
+                )}
               </div>
 
             </div>
@@ -361,11 +453,13 @@ const VideoManagement = () => {
               </button>
               <button
                 type="button"
-                onClick={handleUpload}
-                disabled={uploading || !file || !selectedBranch || !selectedLocation || !title}
+                onClick={handleSubmit}
+                disabled={uploading || (!editingVideo && !file) || !selectedBranch || !selectedLocation || !title}
                 className="px-8 py-2.5 bg-[#127958] hover:bg-[#169a70] text-emerald-50 font-bold rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto text-center shadow-lg"
               >
-                {uploading ? 'Uploading...' : 'Upload'}
+                {uploading 
+                  ? (editingVideo ? 'Saving Changes...' : 'Uploading...') 
+                  : (editingVideo ? 'Save Changes' : 'Upload')}
               </button>
             </div>
           </div>
